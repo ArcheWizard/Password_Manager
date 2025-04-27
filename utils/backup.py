@@ -67,6 +67,13 @@ def export_passwords(filename: str, master_password: str, include_notes: bool = 
 
 def import_passwords(filename: str, master_password: str) -> int:
     """Import passwords from an encrypted JSON file. Returns count of imported items."""
+    import time
+    import json
+    import sqlite3
+    from utils.crypto import decrypt_password, encrypt_password
+    from utils.database import add_password, add_category
+    from utils.logger import log_info, log_error
+    
     if not os.path.exists(filename):
         log_error(f"Import failed: File {filename} not found")
         return 0
@@ -75,8 +82,12 @@ def import_passwords(filename: str, master_password: str) -> int:
         with open(filename, 'rb') as f:
             encrypted_data = f.read()
         
-        json_data = decrypt_password(encrypted_data, master_password)
-        import_data = json.loads(json_data)
+        try:
+            json_data = decrypt_password(encrypted_data, master_password)
+            import_data = json.loads(json_data)
+        except Exception as e:
+            log_error(f"Decryption error: {e}")
+            return 0
         
         # Check for expected format
         if "entries" not in import_data:
@@ -95,21 +106,14 @@ def import_passwords(filename: str, master_password: str) -> int:
             for category in import_data["categories"]:
                 try:
                     add_category(category["name"], category["color"])
-                except sqlite3.IntegrityError:
+                except Exception:
                     # Category already exists, skip
                     pass
         
+        # Add each password individually to avoid transaction locks
         count = 0
-        
-        # Use a connection with retry for busy/locked database
-        conn = sqlite3.connect(DB_FILE, timeout=10.0)  # 10 second timeout for locks
-        conn.isolation_level = None  # Autocommit mode
-        cursor = conn.cursor()
-        
-        try:
-            cursor.execute("BEGIN TRANSACTION")
-            
-            for item in entries:
+        for item in entries:
+            try:
                 website = item["website"]
                 username = item["username"]
                 password = item["password"]
@@ -125,28 +129,19 @@ def import_passwords(filename: str, master_password: str) -> int:
                     if days_diff > 0:
                         expiry_days = int(days_diff)
                 
-                # Insert directly without using add_password to keep the transaction
+                # Use the add_password function directly
                 encrypted = encrypt_password(password)
-                current_time = int(time.time())
-                expiry_date = current_time + (expiry_days * 86400) if expiry_days else None
-                
-                cursor.execute('''
-                    INSERT INTO passwords 
-                    (website, username, password, category, notes, created_at, updated_at, expiry_date) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (website, username, encrypted, category, notes, 
-                      current_time, current_time, expiry_date))
+                add_password(website, username, encrypted, category, notes, expiry_days)
                 count += 1
-            
-            cursor.execute("COMMIT")
-            
-            log_info(f"Imported {count} passwords from {filename} (format v{version})")
-            return count
-        except sqlite3.Error as e:
-            cursor.execute("ROLLBACK")
-            raise e
-        finally:
-            conn.close()
+                
+                # Add a small delay between operations to avoid locking
+                time.sleep(0.05)
+            except Exception as e:
+                log_error(f"Failed to import item: {e}")
+                # Continue with next item
+        
+        log_info(f"Imported {count} passwords from {filename} (format v{version})")
+        return count
             
     except Exception as e:
         log_error(f"Import error: {e}")

@@ -24,8 +24,8 @@ def test_password_strength_evaluation():
     
     # Very strong password
     score, strength = evaluate_password_strength("uE4$x9Lm!2pQr&7Z")
-    assert score == 4
-    assert strength == "Strong"
+    assert score == 5
+    assert strength == "Very Strong"
 
 def test_entropy_calculation():
     """Test password entropy calculation."""

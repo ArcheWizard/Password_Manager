@@ -82,3 +82,10 @@ env/
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# PyQt5 specific files
+*.pyc
+*.pyo
+__pycache__/
+.qt_for_python/
+*.qm
