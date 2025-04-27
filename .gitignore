@@ -1,0 +1,34 @@
+venv/
+__pycache__/
+*.db
+secret.key
+
+# Additional Python-related files
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+
+# VS Code settings (if you use VS Code)
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
