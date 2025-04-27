@@ -32,3 +32,53 @@ coverage.xml
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Backup files created by the application
+*.dat
+
+# Auth file containing your master password hash
+auth.json
+
+# Environment variables
+.env
+
+# Generated documentation
+docs/_build/
+
+# PyCharm settings
+.idea/
+backup.dat
+
+# Two-factor authentication
+totp_config.json
+totp_qr.png
+
+# Logs directory
+logs/
+*.log
+
+# Breach cache
+breach_cache.json
+
+# Backup files
+backups/
+
+# Virtual environment
+env/
+.env/
+.venv/
+
+# IDE/Editor-specific
+.settings/
+.project
+.classpath
+*.sublime-workspace
+*.sublime-project
+.spyderproject
+.spyproject
+.ropeproject
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride

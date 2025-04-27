@@ -6,6 +6,9 @@ with open("README.md", "r", encoding="utf-8") as fh:
 with open("VERSION.txt", "r") as f:
     version = f.read().strip()
 
+with open("requirements.txt", "r") as f:
+    requirements = [line.strip() for line in f.readlines() if not line.startswith('#')]
+
 setup(
     name="secure-password-manager",
     version=version,
@@ -20,15 +23,17 @@ setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Development Status :: 4 - Beta",
+        "Topic :: Security",
+        "Topic :: Utilities",
     ],
     python_requires=">=3.8",
-    install_requires=[
-        "cryptography>=42.0.0",
-        "colorama>=0.4.6",
-    ],
+    install_requires=requirements,
     entry_points={
         "console_scripts": [
             "password-manager=app:main",
+            "password-manager-gui=gui:main",
         ],
     },
+    include_package_data=True,
 )
