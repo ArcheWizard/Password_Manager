@@ -12,7 +12,7 @@ from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
 
 from utils.crypto import encrypt_password, decrypt_password
-from utils.database import init_db, add_password, get_passwords, delete_password, get_categories
+from utils.database import init_db, add_password, get_passwords, delete_password, get_categories, update_password
 from utils.auth import authenticate
 from utils.password_analysis import evaluate_password_strength, generate_secure_password
 from utils.backup import export_passwords, import_passwords
@@ -460,8 +460,41 @@ class PasswordManagerApp(QMainWindow):
             QMessageBox.warning(self, "Error", "No password selected")
             return
             
-        # TODO: Implement toggle favorite functionality
-        QMessageBox.information(self, "Coming Soon", "Toggle favorite feature coming soon!")
+        # Get the entry_id from the first column of the selected row
+        row = selected[0].row()
+        entry_id = int(self.table.item(row, 0).text())
+        website = self.table.item(row, 1).text()
+        
+        # Get current password data to determine current favorite status
+        passwords = get_passwords()
+        target_entry = None
+        
+        for entry in passwords:
+            if entry[0] == entry_id:
+                target_entry = entry
+                break
+        
+        if not target_entry:
+            QMessageBox.warning(self, "Error", f"No password found with ID {entry_id}")
+            return
+        
+        # Extract current favorite status
+        _, _, _, _, _, _, _, _, _, favorite = target_entry
+        
+        # Toggle favorite status
+        new_favorite_status = not favorite
+        
+        # Update the password entry
+        update_password(entry_id, favorite=new_favorite_status)
+        
+        # Refresh the table
+        self.refresh_passwords()
+        
+        # Show status message
+        if new_favorite_status:
+            self.statusBar().showMessage(f"Added {website} to favorites", 3000)
+        else:
+            self.statusBar().showMessage(f"Removed {website} from favorites", 3000)
         
         if auto_close:
             auto_close.close()
@@ -580,11 +613,213 @@ class PasswordManagerApp(QMainWindow):
             QMessageBox.warning(self, "Error", "No password selected")
             return
             
-        # TODO: Implement edit password functionality
-        QMessageBox.information(self, "Coming Soon", "Edit password feature coming soon!")
+        # Get the entry_id from the first column of the selected row
+        row = selected[0].row()
+        entry_id = int(self.table.item(row, 0).text())
         
+        # Get current password data
+        passwords = get_passwords()
+        target_entry = None
+        
+        for entry in passwords:
+            if entry[0] == entry_id:
+                target_entry = entry
+                break
+        
+        if not target_entry:
+            QMessageBox.error(self, "Error", f"No password found with ID {entry_id}")
+            return
+        
+        # Extract current values
+        _, website, username, encrypted, category, notes, _, _, expiry, favorite = target_entry
+        password = decrypt_password(encrypted)
+        
+        # Create edit dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Password")
+        dialog.setMinimumWidth(400)
+        
+        layout = QFormLayout(dialog)
+        
+        # Website field
+        website_edit = QLineEdit(website)
+        layout.addRow("Website:", website_edit)
+        
+        # Username field
+        username_edit = QLineEdit(username)
+        layout.addRow("Username:", username_edit)
+        
+        # Password field with toggle to change
+        password_group = QGroupBox("Password")
+        password_layout = QVBoxLayout(password_group)
+        
+        current_pwd_label = QLabel(f"Current: {'•' * 8}")
+        password_layout.addWidget(current_pwd_label)
+        
+        change_pwd_check = QCheckBox("Change password")
+        password_layout.addWidget(change_pwd_check)
+        
+        password_edit = QLineEdit()
+        password_edit.setEchoMode(QLineEdit.Password)
+        password_edit.setEnabled(False)
+        password_layout.addWidget(password_edit)
+        
+        strength_label = QLabel("")
+        password_layout.addWidget(strength_label)
+        
+        gen_btn = QPushButton("Generate Password")
+        gen_btn.setEnabled(False)
+        password_layout.addWidget(gen_btn)
+        
+        layout.addRow(password_group)
+        
+        # Category selection
+        category_combo = QComboBox()
+        categories = get_categories()
+        category_index = 0
+        
+        for i, (name, _) in enumerate(categories):
+            category_combo.addItem(name)
+            if name == category:
+                category_index = i
+                
+        category_combo.setCurrentIndex(category_index)
+        layout.addRow("Category:", category_combo)
+        
+        # Notes field
+        notes_edit = QLineEdit(notes)
+        layout.addRow("Notes:", notes_edit)
+        
+        # Expiry field
+        expiry_days = ""
+        if expiry:
+            days_left = int((expiry - time.time()) / 86400) if expiry > time.time() else 0
+            expiry_days = str(days_left)
+            
+        expiry_edit = QLineEdit(expiry_days)
+        expiry_edit.setPlaceholderText("Days until expiry (empty for never)")
+        layout.addRow("Expires in:", expiry_edit)
+        
+        # Favorite checkbox
+        favorite_check = QCheckBox("Mark as favorite")
+        favorite_check.setChecked(favorite)
+        layout.addRow("", favorite_check)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            Qt.Horizontal, dialog)
+        layout.addRow(buttons)
+        
+        # Connect signals
+        def toggle_password_change():
+            enabled = change_pwd_check.isChecked()
+            password_edit.setEnabled(enabled)
+            gen_btn.setEnabled(enabled)
+            if enabled:
+                password_edit.setFocus()
+            else:
+                # Clear the field when disabled
+                password_edit.setText("")
+                strength_label.setText("")
+        
+        change_pwd_check.toggled.connect(toggle_password_change)
+        
+        def generate():
+            password = generate_secure_password()
+            password_edit.setText(password)
+            password_edit.setEchoMode(QLineEdit.Normal)  # Show generated password
+            strength_label.setText("<span style='color:green'>Very Strong</span>")
+            
+        gen_btn.clicked.connect(generate)
+        
+        def check_strength():
+            if not change_pwd_check.isChecked():
+                return
+                
+            pwd = password_edit.text()
+            if pwd:
+                score, description = evaluate_password_strength(pwd)
+                # Set color based on strength
+                if score >= 4:
+                    color = "green"
+                elif score >= 3:
+                    color = "orange"
+                else:
+                    color = "red"
+                    
+                strength_label.setText(f"<span style='color:{color}'>{description}</span>")
+            else:
+                strength_label.setText("")
+                
+        password_edit.textChanged.connect(check_strength)
+        
+        def accept():
+            new_website = website_edit.text()
+            new_username = username_edit.text()
+            new_category = category_combo.currentText()
+            new_notes = notes_edit.text()
+            new_favorite = favorite_check.isChecked()
+            
+            # Validate required fields
+            if not (new_website and new_username):
+                QMessageBox.warning(dialog, "Error", "Website and username are required")
+                return
+                
+            # Get new password if changed
+            new_password = None
+            encrypted_password = None
+            if change_pwd_check.isChecked():
+                new_password = password_edit.text()
+                if not new_password:
+                    QMessageBox.warning(dialog, "Error", "Password cannot be empty")
+                    return
+                    
+                # Check password strength if changed
+                score, _ = evaluate_password_strength(new_password)
+                if score < 3:
+                    confirm = QMessageBox.question(dialog, "Weak Password", 
+                                              "This password is weak. Use it anyway?",
+                                              QMessageBox.Yes | QMessageBox.No)
+                    if confirm == QMessageBox.No:
+                        return
+                
+                # Encrypt the new password
+                encrypted_password = encrypt_password(new_password)
+            
+            # Parse expiry days
+            expiry_days = None
+            if expiry_edit.text():
+                if expiry_edit.text().isdigit():
+                    expiry_days = int(expiry_edit.text())
+                else:
+                    QMessageBox.warning(dialog, "Error", "Expiry days must be a number")
+                    return
+            
+            # Update the password entry
+            update_password(
+                entry_id, 
+                website=new_website if new_website != website else None,
+                username=new_username if new_username != username else None,
+                encrypted_password=encrypted_password,
+                category=new_category if new_category != category else None,
+                notes=new_notes if new_notes != notes else None,
+                expiry_days=expiry_days,
+                favorite=new_favorite if new_favorite != favorite else None
+            )
+            
+            dialog.accept()
+            self.refresh_passwords()
+            self.statusBar().showMessage("Password updated successfully", 3000)
+                
+        buttons.accepted.connect(accept)
+        buttons.rejected.connect(dialog.reject)
+        
+        # Show dialog
         if auto_close:
             auto_close.close()
+            
+        dialog.exec_()
         
     def delete_password(self, auto_close=None):
         """Delete the selected password"""
@@ -649,23 +884,195 @@ class PasswordManagerApp(QMainWindow):
     
     def create_full_backup(self):
         """Create a full backup of all data"""
-        # TODO: Implement full backup
-        QMessageBox.information(self, "Coming Soon", "Full backup feature coming soon!")
-    
+        # Get backup directory
+        backup_dir = QFileDialog.getExistingDirectory(self, "Select Backup Directory")
+        if not backup_dir:
+            return
+            
+        # Get master password
+        password, ok = QInputDialog.getText(self, "Backup", 
+                                           "Enter master password to encrypt backup:", 
+                                           QLineEdit.Password)
+        if not ok or not password:
+            return
+            
+        # Show waiting cursor
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self.statusBar().showMessage("Creating backup...")
+        
+        try:
+            # Import from backup.py
+            from utils.backup import create_full_backup
+            
+            # Create backup
+            backup_path = create_full_backup(backup_dir, password)
+            
+            QApplication.restoreOverrideCursor()
+            
+            if backup_path:
+                QMessageBox.information(self, "Success", f"Full backup created at:\n{backup_path}")
+                self.statusBar().showMessage("Backup created successfully")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to create backup")
+                self.statusBar().showMessage("Backup failed")
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
+            self.statusBar().showMessage("Backup failed")
+
     def restore_from_backup(self):
         """Restore data from a full backup"""
-        # TODO: Implement restore from backup
-        QMessageBox.information(self, "Coming Soon", "Restore from backup feature coming soon!")
-    
+        # Warning message
+        confirm = QMessageBox.warning(self, "Warning", 
+                                  "Restoring will replace your current data. Make sure you have a backup!\n\nDo you want to continue?",
+                                  QMessageBox.Yes | QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+            
+        # Get backup file
+        filename, _ = QFileDialog.getOpenFileName(self, "Select Backup File", 
+                                               "", "Zip Files (*.zip)")
+        if not filename:
+            return
+            
+        # Get master password
+        password, ok = QInputDialog.getText(self, "Restore", 
+                                          "Enter master password to decrypt backup:", 
+                                          QLineEdit.Password)
+        if not ok or not password:
+            return
+            
+        # Show waiting cursor
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self.statusBar().showMessage("Restoring from backup...")
+        
+        try:
+            # Import from backup.py
+            from utils.backup import restore_from_backup
+            
+            # Restore from backup
+            success = restore_from_backup(filename, password)
+            
+            QApplication.restoreOverrideCursor()
+            
+            if success:
+                msg = QMessageBox.information(self, "Success", 
+                                          "Backup restored successfully. The application will now close. Please restart it.")
+                QApplication.quit()
+            else:
+                QMessageBox.warning(self, "Error", "Failed to restore from backup")
+                self.statusBar().showMessage("Restore failed")
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
+            self.statusBar().showMessage("Restore failed")
+
     def run_security_audit(self):
         """Run a security audit and display the results"""
-        # Show waiting message
+        # Show waiting message and cursor
         self.statusBar().showMessage("Running security audit...")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
         
-        # TODO: Implement security audit
-        QMessageBox.information(self, "Coming Soon", "Security audit feature coming soon!")
-        
-        self.statusBar().showMessage("Security audit complete")
+        try:
+            # Run the audit
+            from utils.security_audit import run_security_audit
+            audit_results = run_security_audit()
+            
+            # Restore cursor
+            QApplication.restoreOverrideCursor()
+            
+            # Update the UI with results
+            score = audit_results["score"]
+            issues = audit_results["issues"]
+            
+            # Set score with color
+            if score >= 80:
+                color = "green"
+            elif score >= 60:
+                color = "orange"
+            else:
+                color = "red"
+            
+            self.score_label.setText(f"Your security score: <span style='color:{color};font-weight:bold;'>{score}/100</span>")
+            
+            # Set issue counts
+            weak_count = len(issues["weak_passwords"])
+            reused_count = len(issues["reused_passwords"])
+            expired_count = len(issues["expired_passwords"])
+            breached_count = len(issues["breached_passwords"])
+            
+            self.weak_label.setText(f"Weak passwords: <span style='color:{'red' if weak_count else 'green'};'>{weak_count}</span>")
+            self.reused_label.setText(f"Reused passwords: <span style='color:{'red' if reused_count else 'green'};'>{reused_count}</span>")
+            self.expired_label.setText(f"Expired passwords: <span style='color:{'red' if expired_count else 'green'};'>{expired_count}</span>")
+            self.breached_label.setText(f"Breached passwords: <span style='color:{'red' if breached_count else 'green'};'>{breached_count}</span>")
+            
+            # Show detailed results if there are issues
+            total_issues = weak_count + reused_count + expired_count + breached_count
+            if total_issues > 0:
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Security Audit Results")
+                msg.setIcon(QMessageBox.Warning)
+                
+                # Create detailed message
+                details = f"Security Score: {score}/100\n\n"
+                details += f"Issues found:\n\n"
+                
+                if weak_count:
+                    details += f"WEAK PASSWORDS ({weak_count}):\n"
+                    for issue in issues["weak_passwords"][:5]:  # Limit to 5 for readability
+                        details += f"  • {issue['website']} ({issue['username']}) - Score: {issue['score']}\n"
+                    if weak_count > 5:
+                        details += f"  • ... and {weak_count - 5} more\n"
+                    details += "\n"
+                
+                if reused_count:
+                    details += f"REUSED PASSWORDS ({reused_count}):\n"
+                    for issue in issues["reused_passwords"][:5]:  # Limit to 5
+                        sites = ", ".join([site["website"] for site in issue["reused_with"]])
+                        details += f"  • {issue['website']} ({issue['username']}) - Also used on: {sites}\n"
+                    if reused_count > 5:
+                        details += f"  • ... and {reused_count - 5} more\n"
+                    details += "\n"
+                
+                if expired_count:
+                    details += f"EXPIRED PASSWORDS ({expired_count}):\n"
+                    for issue in issues["expired_passwords"][:5]:  # Limit to 5
+                        details += f"  • {issue['website']} ({issue['username']}) - Expired {issue['expired_days']} days ago\n"
+                    if expired_count > 5:
+                        details += f"  • ... and {expired_count - 5} more\n"
+                    details += "\n"
+                
+                if breached_count:
+                    details += f"BREACHED PASSWORDS ({breached_count}):\n"
+                    for issue in issues["breached_passwords"][:5]:  # Limit to 5
+                        details += f"  • {issue['website']} ({issue['username']}) - Found in {issue['breach_count']} breaches\n"
+                    if breached_count > 5:
+                        details += f"  • ... and {breached_count - 5} more\n"
+                    
+                # Set text and detailed text
+                msg.setText(f"Found {total_issues} security issues with your passwords.")
+                msg.setDetailedText(details)
+                
+                # Add recommendations
+                recommendations = (
+                    "Recommendations:\n\n"
+                    "• Generate strong, unique passwords for each account\n"
+                    "• Replace weak passwords with stronger ones\n"
+                    "• Update passwords that appear in data breaches immediately\n"
+                    "• Consider using two-factor authentication where available"
+                )
+                msg.setInformativeText(recommendations)
+                
+                msg.exec_()
+            else:
+                QMessageBox.information(self, "Security Audit", "No security issues found! Your passwords are in good shape.")
+            
+            self.statusBar().showMessage("Security audit complete")
+            
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Error", f"An error occurred during the security audit: {str(e)}")
+            self.statusBar().showMessage("Security audit failed")
 
 def main():
     """Entry point for the GUI application."""

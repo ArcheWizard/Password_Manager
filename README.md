@@ -97,7 +97,33 @@ pip install -r requirements.txt
 
 ## 📸 Screenshots
 
-> (You can paste CLI screenshots later when running.)
+### Home Screen
+
+![Home Screen](screenshots/Home.png)
+
+### Adding a Password
+
+![Add Password](screenshots/Add_Password.png)
+
+### Editing a Password
+
+![Edit Password](screenshots/Edit_Password.png)
+
+### Security Audit
+
+![Security Audit](screenshots/Security.png)
+
+### Backup Options
+
+![Backup](screenshots/Backup.png)
+
+### Exporting Passwords
+
+![Export](screenshots/Export.png)
+
+### Importing Passwords
+
+![Import](screenshots/Import.png)
 
 ---
 
@@ -107,10 +133,10 @@ pip install -r requirements.txt
 - ✅ Password strength evaluation and generator
 - ✅ Unit tests for critical functions
 - ✅ Backup and restore functionality
-- Add a search function for passwords
-- Add password categories/tags
-- Add password expiration notifications
-- GUI version (Tkinter or PyQT)
+- ✅ Add a search function for passwords
+- ✅ Add password categories/tags
+- ✅ Add password expiration notifications
+- ✅ GUI version (PyQT)
 - Two-factor authentication
 - Password history tracking
 - Cross-platform desktop application (using PyInstaller)
