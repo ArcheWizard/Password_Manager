@@ -15,15 +15,27 @@ A simple Password Manager built with Python that securely stores your passwords 
 
 ```plaintext
 password-manager/
-├── app.py                # Main application
-├── requirements.txt      # Python dependencies
+├── app.py                 # Main application
+├── initialize.py          # Setup script
+├── requirements.txt       # Python dependencies
 ├── README.md              # Project documentation
+├── VERSION.txt            # Version information
 ├── .gitignore             # Ignored files
+├── auth.json              # Master password hash
 ├── utils/                 # Helper modules
 │   ├── crypto.py          # Encryption/decryption functions
 │   ├── database.py        # Database handling
-│   └── ui.py              # (Future UI handling)
-└── tests/                 # (Future: unit tests)
+│   ├── ui.py              # UI formatting utilities
+│   ├── auth.py            # Authentication utilities
+│   ├── backup.py          # Import/export utilities
+│   └── password_strength.py # Password evaluation
+├── tests/                 # Unit tests
+│   ├── __init__.py
+│   ├── test_crypto.py     # Tests for crypto functions
+│   └── test_database.py   # Tests for database functions
+└── .github/               # GitHub specific files
+    └── workflows/         # GitHub Actions
+        └── ci.yml         # Continuous Integration
 ```
 
 ## 🛠️ Installation
@@ -79,11 +91,18 @@ pip install -r requirements.txt
 
 ## 📚 Future Improvements
 
-- Add a Master Password authentication.
-- Password strength generator.
-- GUI version (Tkinter or PyQT).
-- Unit tests for critical functions.
-- Docker support.
+- ✅ Add a Master Password authentication
+- ✅ Password strength evaluation and generator
+- ✅ Unit tests for critical functions
+- ✅ Backup and restore functionality
+- Add a search function for passwords
+- Add password categories/tags
+- Add password expiration notifications
+- GUI version (Tkinter or PyQT)
+- Two-factor authentication
+- Password history tracking
+- Cross-platform desktop application (using PyInstaller)
+- Docker support
 
 ---
 
