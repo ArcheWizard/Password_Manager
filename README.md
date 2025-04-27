@@ -1,4 +1,3 @@
-
 # 🔐 Password Manager
 
 A simple Password Manager built with Python that securely stores your passwords locally using encryption.
@@ -90,10 +89,10 @@ pip install -r requirements.txt
 
 ## 👨‍💻 Author
 
-- **Your Name** – [GitHub Profile](https://github.com/yourusername)
+- **ArcheWizard** – [GitHub Profile](https://github.com/ArcheWizard)
 
 ---
 
-## ⚡ License
+## Create a MIT license file
 
-This project is open-source and available under the [MIT License](LICENSE).
+curl <https://opensource.org/licenses/MIT> > LICENSE
