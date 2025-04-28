@@ -24,12 +24,10 @@ The project is organized into modules for maintainability and separation of conc
 
 ```plaintext
 password-manager/
-├── [app.py](http://_vscodecontentref_/4)                 # CLI application entry point
-├── [gui.py](http://_vscodecontentref_/5)                 # GUI application entry point
-├── [initialize.py](http://_vscodecontentref_/6)          # Setup script
-├── [migrate_db.py](http://_vscodecontentref_/7)          # Database migration tool
-├── [requirements.txt](http://_vscodecontentref_/8)       # Python dependencies
-├── [setup.py](http://_vscodecontentref_/9)               # Packaging configuration
+├── apps/                  # Application code
+│   ├── __init__.py        # Package initialization
+│   ├── app.py             # CLI application entry point
+│   └── gui.py             # GUI application entry point
 ├── utils/                 # Core utilities
 │   ├── [auth.py](http://_vscodecontentref_/10)            # Authentication
 │   ├── [backup.py](http://_vscodecontentref_/11)          # Import/export 

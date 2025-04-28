@@ -89,3 +89,11 @@ env/
 __pycache__/
 .qt_for_python/
 *.qm
+
+# PyProject build artifacts
+.pyproject.toml.swp
+__pypackages__/
+
+# Python virtual environment directories
+.python-version
+.venv/
