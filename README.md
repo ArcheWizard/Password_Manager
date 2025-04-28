@@ -18,6 +18,58 @@ A secure Password Manager built with Python that securely stores your passwords 
 - **GUI Interface**: Optional PyQt5 graphical interface
 - **Activity Logging**: Track all important actions
 
+## 🛠️ Installation
+
+### Option 1: Install from PyPI (Recommended)
+
+The simplest way to install Secure Password Manager:
+
+```bash
+pip install secure-password-manager
+```
+
+After installation, you can run the application with:
+
+```bash
+# For the command-line interface
+password-manager
+
+# For the graphical interface
+password-manager-gui
+```
+
+### Option 2: Install from Source
+
+1. Clone the repository:
+
+    ```bash
+    git clone https://github.com/ArcheWizard/password-manager.git
+    cd password-manager
+    ```
+
+2. Create and activate a virtual environment:
+
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate   # On Windows: venv\Scripts\activate
+    ```
+
+3. Install the package in development mode:
+
+    ```bash
+    pip install -e .
+    ```
+
+## 🛡️ Requirements
+
+- Python 3.8+
+- Core dependencies (installed automatically):
+  - `cryptography`: For secure encryption
+  - `PyQt5`: For the GUI interface
+  - `zxcvbn`: For password strength analysis
+  - `pillow`: For image processing
+  - Additional dependencies as listed in `requirements.txt`
+
 ## 📂 Project Structure
 
 The project is organized into modules for maintainability and separation of concerns:
@@ -29,69 +81,20 @@ password-manager/
 │   ├── app.py             # CLI application entry point
 │   └── gui.py             # GUI application entry point
 ├── utils/                 # Core utilities
-│   ├── [auth.py](http://_vscodecontentref_/10)            # Authentication
-│   ├── [backup.py](http://_vscodecontentref_/11)          # Import/export 
-│   ├── [crypto.py](http://_vscodecontentref_/12)          # Encryption/decryption
-│   ├── [database.py](http://_vscodecontentref_/13)        # Database operations
-│   ├── [interactive.py](http://_vscodecontentref_/14)     # CLI input utilities
-│   ├── [logger.py](http://_vscodecontentref_/15)          # Logging facilities
-│   ├── [password_analysis.py](http://_vscodecontentref_/16) # Password evaluation
-│   ├── [security_analyzer.py](http://_vscodecontentref_/17) # Breach checking
-│   ├── [security_audit.py](http://_vscodecontentref_/18)  # Security auditing
-│   ├── [two_factor.py](http://_vscodecontentref_/19)      # 2FA implementation
-│   └── [ui.py](http://_vscodecontentref_/20)              # UI formatting
+│   ├── auth.py            # Authentication
+│   ├── backup.py          # Import/export 
+│   ├── crypto.py          # Encryption/decryption
+│   ├── database.py        # Database operations
+│   ├── interactive.py     # CLI input utilities
+│   ├── logger.py          # Logging facilities
+│   ├── password_analysis.py # Password evaluation
+│   ├── security_analyzer.py # Breach checking
+│   ├── security_audit.py  # Security auditing
+│   ├── two_factor.py      # 2FA implementation
+│   └── ui.py              # UI formatting
 ├── tests/                 # Unit & integration tests
-│   ├── [test_crypto.py](http://_vscodecontentref_/21)     
-│   ├── [test_database.py](http://_vscodecontentref_/22)   
-│   ├── [test_integration.py](http://_vscodecontentref_/23)
-│   └── [test_password_analysis.py](http://_vscodecontentref_/24)
-└── [README.md](http://_vscodecontentref_/25)              # Project documentation
+└── README.md              # Project documentation
 ```
-
-## 🛠️ Installation
-
-1. Clone the repository:
-
-    ```bash
-    git clone https://github.com/yourusername/password-manager.git
-    cd password-manager
-    ```
-
-2. Create and activate a virtual environment:
-
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate   # On Windows: venv\Scripts\activate
-    ```
-
-3. Install dependencies:
-
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4. Run the application:
-
-    ```bash
-    python app.py
-    ```
-
----
-
-## 🛡️ Requirements
-
-- Python 3.8+
-- Libraries:
-  - `cryptography`
-  - `colorama`
-
-Install them via:
-
-```bash
-pip install -r requirements.txt
-```
-
----
 
 ## 📸 Screenshots
 
@@ -122,25 +125,6 @@ pip install -r requirements.txt
 ### Importing Passwords
 
 ![Import](screenshots/Import.png)
-
----
-
-## 📚 Future Improvements
-
-- ✅ Add a Master Password authentication
-- ✅ Password strength evaluation and generator
-- ✅ Unit tests for critical functions
-- ✅ Backup and restore functionality
-- ✅ Add a search function for passwords
-- ✅ Add password categories/tags
-- ✅ Add password expiration notifications
-- ✅ GUI version (PyQT)
-- Two-factor authentication
-- Password history tracking
-- Cross-platform desktop application (using PyInstaller)
-- Docker support
-
----
 
 ## 🔒 How It Works
 
@@ -173,14 +157,26 @@ This Password Manager uses a multi-layered security approach:
    - The entire password list is serialized to JSON
    - The JSON is encrypted and written to a file
 
----
+## 📚 Future Improvements
+
+- ✅ Add a Master Password authentication
+- ✅ Password strength evaluation and generator
+- ✅ Unit tests for critical functions
+- ✅ Backup and restore functionality
+- ✅ Add a search function for passwords
+- ✅ Add password categories/tags
+- ✅ Add password expiration notifications
+- ✅ GUI version (PyQT)
+- ✅ Package available on PyPI
+- Two-factor authentication
+- Password history tracking
+- Cross-platform desktop application (using PyInstaller)
+- Docker support
 
 ## 👨‍💻 Author
 
 - **ArcheWizard** – [GitHub Profile](https://github.com/ArcheWizard)
 
----
+## 📄 License
 
-## Create a MIT license file
-
-curl <https://opensource.org/licenses/MIT> > LICENSE
+This project is licensed under the MIT License - see the LICENSE file for details.
