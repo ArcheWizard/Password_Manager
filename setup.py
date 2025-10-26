@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 # Handle errors gracefully for missing files
 try:
@@ -15,7 +15,9 @@ except FileNotFoundError:
 
 try:
     with open("requirements.txt", "r") as f:
-        requirements = [line.strip() for line in f.readlines() if not line.startswith('#')]
+        requirements = [
+            line.strip() for line in f.readlines() if not line.startswith("#")
+        ]
 except FileNotFoundError:
     # Core dependencies with versions that work with Python 3.13
     requirements = [
