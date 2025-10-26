@@ -1,6 +1,8 @@
-# 🔐 Password Manager
+# 🔐 Secure Password Manager
 
-A secure Password Manager built with Python that securely stores your passwords locally using strong encryption.
+A local-first Password Manager built with Python that securely stores your passwords using strong encryption.
+
+Current version: see `VERSION.txt` (v1.7.0)
 
 ## 🚀 Features
 
@@ -17,6 +19,17 @@ A secure Password Manager built with Python that securely stores your passwords 
 - **Command-Line Interface**: User-friendly CLI with color formatting
 - **GUI Interface**: Optional PyQt5 graphical interface
 - **Activity Logging**: Track all important actions
+
+## 📚 Documentation
+
+Comprehensive project documentation lives in the `docs/` folder:
+
+- Current status: `docs/current_status.md`
+- Architecture: `docs/architecture.md`
+- Database: `docs/database.md`
+- Security model: `docs/security.md`
+- Development guide: `docs/development.md`
+- Roadmap: `docs/roadmap.md`
 
 ## 🛠️ Installation
 
@@ -82,7 +95,7 @@ password-manager/
 │   └── gui.py             # GUI application entry point
 ├── utils/                 # Core utilities
 │   ├── auth.py            # Authentication
-│   ├── backup.py          # Import/export 
+│   ├── backup.py          # Import/export
 │   ├── crypto.py          # Encryption/decryption
 │   ├── database.py        # Database operations
 │   ├── interactive.py     # CLI input utilities
@@ -134,7 +147,7 @@ This Password Manager uses a multi-layered security approach:
 
 1. **Master Password**: Access to the application is protected by a master password that is never stored directly. Instead, a salted hash is stored using PBKDF2 with 100,000 iterations.
 
-2. **Encryption**: All passwords are encrypted using Fernet symmetric encryption (AES-128 in CBC mode with PKCS7 padding).
+2. **Encryption**: All passwords are encrypted using Fernet symmetric encryption (AES-128-CBC + HMAC integrity, via `cryptography`).
 
 3. **Key Management**: The encryption key is stored locally and is used for encrypting/decrypting the stored passwords.
 
@@ -157,20 +170,45 @@ This Password Manager uses a multi-layered security approach:
    - The entire password list is serialized to JSON
    - The JSON is encrypted and written to a file
 
-## 📚 Future Improvements
+## 🧪 Testing
 
-- ✅ Add a Master Password authentication
+```bash
+pytest -q
+```
+
+Notes:
+
+- Integration tests use temporary databases and patch `DB_FILE`
+- Network-dependent breach checks are limited and resilient to failures
+- SQLite can lock under concurrent operations; tests include small delays/workarounds
+
+## 🗺️ Roadmap (excerpt)
+
+See `docs/roadmap.md` for the full plan. Highlights:
+
+- Derive or protect `secret.key` using the master password (or OS keyring)
+- Stronger KDF defaults (Argon2id/scrypt) with parameter versioning
+- Improved import/restore reliability and integrity verification
+- Clipboard auto-clear and additional UX hardening
+
+## 📝 Changelog
+
+See `CHANGELOG.md` for release notes.
+
+## 📚 Future Improvements (historical)
+
+- ✅ Master Password authentication
 - ✅ Password strength evaluation and generator
 - ✅ Unit tests for critical functions
 - ✅ Backup and restore functionality
-- ✅ Add a search function for passwords
-- ✅ Add password categories/tags
-- ✅ Add password expiration notifications
-- ✅ GUI version (PyQT)
+- ✅ Search
+- ✅ Categories/tags
+- ✅ Password expiration notifications
+- ✅ GUI version (PyQt)
 - ✅ Package available on PyPI
-- Two-factor authentication
+- ✅ Two-factor authentication (TOTP)
 - Password history tracking
-- Cross-platform desktop application (using PyInstaller)
+- Cross-platform desktop application (PyInstaller)
 - Docker support
 
 ## 👨‍💻 Author
@@ -180,3 +218,7 @@ This Password Manager uses a multi-layered security approach:
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+For security considerations and design details, start with `docs/security.md` and `docs/architecture.md`.
