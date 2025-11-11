@@ -10,47 +10,23 @@ import pyperclip
 from colorama import Fore, Style, init
 
 from utils.auth import authenticate, set_master_password
-from utils.backup import (
-    create_full_backup,
-    export_passwords,
-    import_passwords,
-    restore_from_backup,
-)
-from utils.crypto import (
-    decrypt_password,
-    encrypt_password,
-    set_master_password_context,
-    is_key_protected,
-    protect_key_with_master_password,
-    unprotect_key,
-)
-from utils.database import (
-    DB_FILE,
-    add_category,
-    add_password,
-    delete_password,
-    get_categories,
-    get_expiring_passwords,
-    get_passwords,
-    init_db,
-    update_password,
-)
+from utils.backup import (create_full_backup, export_passwords,
+                          import_passwords, restore_from_backup)
+from utils.crypto import (decrypt_password, encrypt_password,
+                          set_master_password_context)
+from utils.database import (DB_FILE, add_category, add_password,
+                            delete_password, get_categories,
+                            get_expiring_passwords, get_passwords, init_db,
+                            update_password)
 from utils.logger import get_log_entries, log_info
-from utils.password_analysis import (
-    evaluate_password_strength,
-    generate_secure_password,
-    get_password_improvement_suggestions,
-)
+from utils.password_analysis import (evaluate_password_strength,
+                                     generate_secure_password,
+                                     get_password_improvement_suggestions)
 from utils.security_audit import run_security_audit
-from utils.two_factor import disable_2fa, is_2fa_enabled, setup_totp, verify_totp
-from utils.ui import (
-    print_error,
-    print_header,
-    print_menu_option,
-    print_success,
-    print_table,
-    print_warning,
-)
+from utils.two_factor import (disable_2fa, is_2fa_enabled, setup_totp,
+                              verify_totp)
+from utils.ui import (print_error, print_header, print_menu_option,
+                      print_success, print_table, print_warning)
 
 # Initialize Colorama
 init(autoreset=True)

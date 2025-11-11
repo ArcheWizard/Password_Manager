@@ -8,17 +8,12 @@ from unittest.mock import patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.crypto import (
-    derive_keys_from_password,
-    encrypt_with_password_envelope,
-    decrypt_with_password_envelope,
-    protect_key_with_master_password,
-    unprotect_key,
-    is_key_protected,
-    load_kdf_params,
-    set_master_password_context,
-    generate_key,
-)
+from utils.crypto import (decrypt_with_password_envelope,
+                          derive_keys_from_password,
+                          encrypt_with_password_envelope, generate_key,
+                          is_key_protected, load_kdf_params,
+                          protect_key_with_master_password,
+                          set_master_password_context, unprotect_key)
 
 
 def test_kdf_params_versioning():
@@ -135,10 +130,9 @@ def test_protect_and_unprotect_key():
         enc_key_file = os.path.join(tmpdir, "secret.key.enc")
         salt_file = os.path.join(tmpdir, "crypto.salt")
 
-        with patch("utils.crypto.KEY_FILE", key_file), \
-             patch("utils.crypto.ENC_KEY_FILE", enc_key_file), \
-             patch("utils.crypto.SALT_FILE", salt_file):
-
+        with patch("utils.crypto.KEY_FILE", key_file), patch(
+            "utils.crypto.ENC_KEY_FILE", enc_key_file
+        ), patch("utils.crypto.SALT_FILE", salt_file):
             # Generate a plaintext key
             generate_key()
             assert os.path.exists(key_file)

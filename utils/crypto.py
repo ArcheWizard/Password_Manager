@@ -238,6 +238,7 @@ def load_key() -> bytes:
 
 # Encryption/Decryption for vault (file key) or with a provided master password for exports
 
+
 def encrypt_password(password: str, master_password: Optional[str] = None) -> bytes:
     """
     Encrypt a password string to bytes.
@@ -254,7 +255,9 @@ def encrypt_password(password: str, master_password: Optional[str] = None) -> by
     return f.encrypt(password.encode("utf-8"))
 
 
-def decrypt_password(encrypted_password: bytes, master_password: Optional[str] = None) -> str:
+def decrypt_password(
+    encrypted_password: bytes, master_password: Optional[str] = None
+) -> str:
     """
     Decrypt an encrypted password bytes to string.
 
@@ -274,6 +277,7 @@ def decrypt_password(encrypted_password: bytes, master_password: Optional[str] =
 
 
 # Envelope helpers for export/import with integrity HMAC
+
 
 def encrypt_with_password_envelope(plaintext: str, password: str) -> bytes:
     """Encrypt plaintext with Fernet using a password-derived key and wrap with HMAC envelope.

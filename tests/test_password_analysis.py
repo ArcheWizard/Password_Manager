@@ -3,12 +3,9 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.password_analysis import (
-    calculate_entropy,
-    check_common_patterns,
-    evaluate_password_strength,
-    get_password_improvement_suggestions,
-)
+from utils.password_analysis import (calculate_entropy, check_common_patterns,
+                                     evaluate_password_strength,
+                                     get_password_improvement_suggestions)
 
 
 def test_password_strength_evaluation():

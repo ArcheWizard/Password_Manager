@@ -7,13 +7,9 @@ import time
 import zipfile
 from typing import Optional
 
-from utils.crypto import (
-    decrypt_password,
-    encrypt_password,
-    encrypt_with_password_envelope,
-    decrypt_with_password_envelope,
-)
-from utils.database import add_category, add_password, get_categories, get_passwords
+from utils.crypto import (decrypt_password, decrypt_with_password_envelope,
+                          encrypt_password, encrypt_with_password_envelope)
+from utils.database import add_category, get_categories, get_passwords
 from utils.logger import log_error, log_info
 
 
@@ -88,10 +84,9 @@ def export_passwords(
 def import_passwords(filename: str, master_password: str) -> int:
     """Import passwords from an encrypted JSON file. Returns count of imported items."""
     import json
-    import time
     import sqlite3
+    import time
 
-    from utils.crypto import decrypt_with_password_envelope, encrypt_password
     from utils.database import DB_FILE
     from utils.logger import log_error, log_info
 

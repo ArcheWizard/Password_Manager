@@ -3,7 +3,8 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.crypto import decrypt_password, encrypt_password, generate_key, load_key
+from utils.crypto import (decrypt_password, encrypt_password, generate_key,
+                          load_key)
 
 
 def test_encryption_decryption():

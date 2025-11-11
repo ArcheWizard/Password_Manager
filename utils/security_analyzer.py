@@ -112,12 +112,10 @@ def analyze_password_security(password: str) -> Dict[str, Any]:
 
     Returns a dictionary with analysis results.
     """
-    from utils.password_analysis import (
-        calculate_entropy,
-        check_common_patterns,
-        evaluate_password_strength,
-        get_password_improvement_suggestions,
-    )
+    from utils.password_analysis import (calculate_entropy,
+                                         check_common_patterns,
+                                         evaluate_password_strength,
+                                         get_password_improvement_suggestions)
 
     # Basic strength evaluation
     score, strength = evaluate_password_strength(password)
