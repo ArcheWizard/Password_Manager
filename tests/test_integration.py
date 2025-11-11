@@ -112,9 +112,7 @@ def test_backup_and_restore(test_db):
     # Use multi-level patching for consistent DB_FILE references
     from utils import backup, database
 
-    with patch.object(database, "DB_FILE", test_db), patch.object(
-        backup, "DB_FILE", test_db
-    ), patch(
+    with patch.object(database, "DB_FILE", test_db), patch(
         "utils.backup.get_passwords",
         lambda *args, **kwargs: get_passwords(*args, **kwargs),
     ):

@@ -16,7 +16,14 @@ from utils.backup import (
     import_passwords,
     restore_from_backup,
 )
-from utils.crypto import decrypt_password, encrypt_password
+from utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    set_master_password_context,
+    is_key_protected,
+    protect_key_with_master_password,
+    unprotect_key,
+)
 from utils.database import (
     DB_FILE,
     add_category,
@@ -1185,9 +1192,10 @@ def login() -> bool:
 
             # Set the master password
             set_master_password(password)
+            set_master_password_context(password)
             print_success("Master password created successfully")
             log_info("Master password created")
-            break
+            return True
 
     else:
         password = input("Enter master password: ")
@@ -1210,6 +1218,7 @@ def login() -> bool:
                 return False
 
         print_success("Authentication successful")
+        set_master_password_context(password)
         return True
 
 

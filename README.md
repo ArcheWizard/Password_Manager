@@ -2,7 +2,15 @@
 
 A local-first Password Manager built with Python that securely stores your passwords using strong encryption.
 
-Current version: see `VERSION.txt` (v1.7.0)
+Current version: see `VERSION.txt` (v1.8.0)
+
+**🆕 What's New in v1.8.0:**
+
+- **KDF versioning** for future-proof key derivation
+- **Optional key protection** with master password (encrypt `secret.key`)
+- **Export integrity HMAC** to detect tampering
+- **Bulk import transactions** for faster, lock-free restore
+- See [v1.8.0 improvements](docs/v1.8.0_improvements.md) for details
 
 ## 🚀 Features
 

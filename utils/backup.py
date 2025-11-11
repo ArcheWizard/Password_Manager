@@ -7,7 +7,12 @@ import time
 import zipfile
 from typing import Optional
 
-from utils.crypto import decrypt_password, encrypt_password
+from utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    encrypt_with_password_envelope,
+    decrypt_with_password_envelope,
+)
 from utils.database import add_category, add_password, get_categories, get_passwords
 from utils.logger import log_error, log_info
 
@@ -69,12 +74,10 @@ def export_passwords(
         {"name": name, "color": color} for name, color in categories
     ]
 
-    # Encrypt the entire JSON with the master password
-    json_data = json.dumps(export_data)
-    encrypted_data = encrypt_password(json_data, master_password)
-
+    # Encrypt using envelope format (integrity HMAC)
+    blob = encrypt_with_password_envelope(json.dumps(export_data), master_password)
     with open(filename, "wb") as f:
-        f.write(encrypted_data)
+        f.write(blob)
 
     # Log the export
     log_info(f"Exported {len(passwords)} passwords to {filename}")
@@ -86,8 +89,10 @@ def import_passwords(filename: str, master_password: str) -> int:
     """Import passwords from an encrypted JSON file. Returns count of imported items."""
     import json
     import time
+    import sqlite3
 
-    from utils.crypto import decrypt_password, encrypt_password
+    from utils.crypto import decrypt_with_password_envelope, encrypt_password
+    from utils.database import DB_FILE
     from utils.logger import log_error, log_info
 
     if not os.path.exists(filename):
@@ -96,10 +101,10 @@ def import_passwords(filename: str, master_password: str) -> int:
 
     try:
         with open(filename, "rb") as f:
-            encrypted_data = f.read()
+            blob = f.read()
 
         try:
-            json_data = decrypt_password(encrypted_data, master_password)
+            json_data = decrypt_with_password_envelope(blob, master_password)
             import_data = json.loads(json_data)
         except Exception as e:
             log_error(f"Decryption error: {e}")
@@ -127,34 +132,55 @@ def import_passwords(filename: str, master_password: str) -> int:
                     pass
 
         # Add each password individually to avoid transaction locks
+        # Bulk insert within a single transaction to minimize locks
         count = 0
-        for item in entries:
-            try:
-                website = item["website"]
-                username = item["username"]
-                password = item["password"]
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            cursor = conn.cursor()
+            now = int(time.time())
+            rows = []
+            for item in entries:
+                try:
+                    website = item["website"]
+                    username = item["username"]
+                    password = item["password"]
 
-                # Get optional fields with defaults
-                category = item.get("category", "General")
-                notes = item.get("notes", "")
-                expiry_days = None
+                    category = item.get("category", "General")
+                    notes = item.get("notes", "")
+                    expiry_ts = item.get("expiry_date")
 
-                if "expiry_date" in item and item["expiry_date"]:
-                    # Convert from timestamp to days from now
-                    days_diff = (item["expiry_date"] - int(time.time())) / 86400
-                    if days_diff > 0:
-                        expiry_days = int(days_diff)
+                    encrypted = encrypt_password(password)
+                    created_at = item.get("created_at", now)
+                    updated_at = item.get("updated_at", now)
+                    expiry_date = expiry_ts if isinstance(expiry_ts, int) else None
 
-                # Use the add_password function directly
-                encrypted = encrypt_password(password)
-                add_password(website, username, encrypted, category, notes, expiry_days)
-                count += 1
-
-                # Add a small delay between operations to avoid locking
-                time.sleep(0.05)
-            except Exception as e:
-                log_error(f"Failed to import item: {e}")
-                # Continue with next item
+                    rows.append(
+                        (
+                            website,
+                            username,
+                            encrypted,
+                            category,
+                            notes,
+                            created_at,
+                            updated_at,
+                            expiry_date,
+                        )
+                    )
+                except Exception as e:
+                    log_error(f"Failed to parse item: {e}")
+            if rows:
+                cursor.executemany(
+                    """
+                    INSERT INTO passwords
+                    (website, username, password, category, notes, created_at, updated_at, expiry_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+                conn.commit()
+                count = len(rows)
+        finally:
+            conn.close()
 
         log_info(f"Imported {count} passwords from {filename} (format v{version})")
         return count

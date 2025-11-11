@@ -1,6 +1,6 @@
 import sqlite3
 import time
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 DB_FILE = "passwords.db"
 
@@ -64,7 +64,7 @@ def add_password(
     encrypted_password: bytes,
     category: str = "General",
     notes: str = "",
-    expiry_days: int = None,
+    expiry_days: Optional[int] = None,
 ) -> None:
     """Add a new password entry."""
     current_time = int(time.time())
@@ -74,8 +74,8 @@ def add_password(
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO passwords 
-        (website, username, password, category, notes, created_at, updated_at, expiry_date) 
+        INSERT INTO passwords
+        (website, username, password, category, notes, created_at, updated_at, expiry_date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
@@ -187,7 +187,7 @@ def update_password(
 
     # Prepare update values
     current_time = int(time.time())
-    updates = {"updated_at": current_time}
+    updates: Dict[str, Any] = {"updated_at": current_time}
 
     if website is not None:
         updates["website"] = website
@@ -249,9 +249,9 @@ def get_expiring_passwords(days: int = 30) -> List[Tuple]:
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT * FROM passwords 
-        WHERE expiry_date IS NOT NULL 
-        AND expiry_date < ? 
+        SELECT * FROM passwords
+        WHERE expiry_date IS NOT NULL
+        AND expiry_date < ?
         AND expiry_date > ?
     """,
         (expiry_threshold, int(time.time())),

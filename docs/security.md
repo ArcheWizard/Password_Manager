@@ -13,14 +13,16 @@ This document describes the security model, cryptography choices, and operationa
 
 - Algorithm: Fernet (symmetric authenticated encryption; AES-128-CBC + HMAC; provided by the `cryptography` library)
 - Default key: 32-byte key stored in `secret.key` (generated on first use)
-- Optional password-derived key: PBKDF2-HMAC-SHA256, 100,000 iterations, salt stored in `crypto.salt`
-  - Used by `encrypt_password(..., master_password=...)` for export/import sealing
-  - Not used by default for the at-rest vault (which uses the file key)
+- **NEW in v1.8**: Optional key protection: `secret.key` can be wrapped (encrypted) with a KEK derived from the master password and stored in `secret.key.enc`. When protected, the master password context must be set at login to unwrap the vault key.
+- Password-derived key (for exports/imports): PBKDF2-HMAC-SHA256, iterations and salt configurable, stored in `crypto.salt` as JSON with KDF version metadata
+  - Current default: 100,000 iterations (v1)
+  - Used by `encrypt_with_password_envelope()` for export/import sealing; returns separate encryption + HMAC keys
+- **NEW in v1.8**: KDF versioning in `crypto.salt`: stores `{"kdf": "PBKDF2HMAC", "version": 1, "iterations": 100000, "salt": "<base64>", "updated_at": <ts>}` for forward compatibility; legacy raw salt files are auto-migrated on first load.
 
 Notes:
 
-- The module imports `Scrypt` but currently only PBKDF2 is used for derivation
-- Consider migrating to Argon2id or scrypt for KDF in future versions
+- The module supports multiple KDF params for future flexibility (Argon2id/scrypt can be added)
+- Backward compatible: legacy raw salt files and raw Fernet tokens (v2.0 exports) are still supported
 
 ## Master Password
 
@@ -46,8 +48,10 @@ Notes:
 
 ## Backup/Restore
 
-- Encrypted export: entries are decrypted, serialized to JSON, then encrypted with a key derived from a user-supplied password (PBKDF2 + salt). Output is a `.dat` file.
-- Full backup (zip): includes `passwords.db`, `secret.key`, `auth.json`, `crypto.salt`, and the encrypted export + metadata.
+- **NEW in v1.8**: Encrypted export with integrity HMAC: entries are decrypted, serialized to JSON, then encrypted with a key derived from a user-supplied password (PBKDF2 + salt). The ciphertext is wrapped in a JSON envelope containing metadata and an HMAC-SHA256 integrity tag. Output is a `.dat` file.
+  - Export format version: `2.1` (includes `{"format": "spm-export", "version": "2.1", "kdf": {...}, "ciphertext": "<base64>", "hmac": "<hex>", "hmac_alg": "HMAC-SHA256"}`)
+  - Import verifies HMAC before decryption; falls back to legacy raw token format (v2.0) for backward compatibility.
+- Full backup (zip): includes `passwords.db`, `secret.key` (or `secret.key.enc` if protected), `auth.json`, `crypto.salt`, and the encrypted export + metadata.
 - Restore: verifies the archive and replaces local files, keeping timestamped backups of previous files.
 
 ## Operational Security Guidelines
@@ -60,8 +64,9 @@ Notes:
 
 ## Known Gaps / Future Hardening
 
-- At-rest key protection: support deriving the vault key from the master password (and removing `secret.key`), or encrypt `secret.key` with a KEK derived from the master password
-- Stronger KDF: migrate to Argon2id (memory-hard), make iterations/salt configurable, version KDF parameters
+- **IMPROVED in v1.8**: At-rest key protection: optional feature to encrypt `secret.key` with a KEK derived from the master password (see `protect_key_with_master_password()` in `utils/crypto.py`). When enabled, `secret.key.enc` is used and requires the master password context to be set at login. This reduces the risk if the file key is stolen without the master password.
+- Stronger KDF: configurable PBKDF2 iterations and salt with version metadata (v1.8); future versions can add Argon2id (memory-hard) or scrypt, and make iterations/salt fully configurable per-user.
+- **IMPROVED in v1.8**: Import robustness: bulk insert using `executemany` in a single transaction to avoid SQLite locks (replaces individual add_password calls with delays).
 - Secure UI: optional password reveal timeouts and redactions; auto-clear clipboard
-- DB hardening: add integrity checks and optional per-entry nonces or key rotation strategy
+- DB hardening: add per-entry nonces, integrity checks, and optional key rotation strategy
 - Secrets storage: optional OS keyring integration (e.g., Secret Service, Keychain, Credential Manager)

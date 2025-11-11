@@ -2,23 +2,29 @@
 
 This document outlines proposed improvements and priorities for future releases.
 
+## Completed in v1.8.0
+
+- ✅ KDF parameter versioning and configurability (PBKDF2 iterations, salt stored as JSON with metadata)
+- ✅ Optional key protection: encrypt `secret.key` with KEK derived from master password
+- ✅ Export integrity HMAC: envelope format (v2.1) with HMAC-SHA256 over ciphertext
+- ✅ Transactional bulk import: use `executemany` to avoid SQLite locks and improve performance
+- ✅ Backward compatibility: legacy salt files and export formats (v2.0) still supported
+
 ## Near-term
 
 - Key management
-  - Option to derive the vault key from the master password and remove plaintext `secret.key`
-  - Encrypt `secret.key` with a KEK derived from master password (transition step)
+  - Option to fully derive the vault key from the master password and remove file-based key (extends v1.8 protection)
+  - Make KDF iterations and salt size user-configurable via settings
 - KDF hardening
-  - Configurable PBKDF2 iterations and salt; consider Argon2id/scrypt with parameter versioning
-- Import/Export
-  - Robust import that avoids SQLite locks and supports transactional bulk insert
-  - Validate backup file metadata and integrity (HMAC)
-- Security audit
-  - Batch breach checks with backoff and caching policies
-  - Offline breach dictionary support
+  - Add support for Argon2id or scrypt with parameter versioning
+  - Allow per-user KDF selection and migration path
 - UX
   - Auto-clear clipboard after timeout; minimize secret exposure in UI/CLI
   - Per-entry password history and last-rotated timestamp
-  - Better category management (colors/icons)
+  - Better category management (colors/icons in CLI)
+- Security audit improvements
+  - Batch breach checks with backoff and caching policies
+  - Offline breach dictionary support
 
 ## Mid-term
 

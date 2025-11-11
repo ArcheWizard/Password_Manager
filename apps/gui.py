@@ -5,6 +5,7 @@ import time
 
 import pyperclip
 from PyQt5.QtCore import QSize, Qt, QTimer
+from PyQt5.QtCore import Qt as QtCoreQt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QAction,
@@ -55,12 +56,38 @@ class PasswordManagerApp(QMainWindow):
         # Initialize database
         init_db()
 
-        # Authenticate
-        if not self.authenticate():
+        # Authenticate and set master password context
+        password = self.get_master_password()
+        if password is None:
             sys.exit(0)
+
+        from utils.crypto import set_master_password_context
+        set_master_password_context(password)
 
         # Create UI
         self.init_ui()
+
+    def get_master_password(self):
+        """Prompt for master password and return it if authentication succeeds, else None."""
+        for attempt in range(3):
+            password, ok = QInputDialog.getText(
+                self, "Login", "Enter master password:", QLineEdit.Password
+            )
+            if not ok:  # User cancelled
+                return None
+
+            if authenticate(password):
+                return password
+
+            if attempt < 2:
+                QMessageBox.warning(
+                    self,
+                    "Login Failed",
+                    f"Incorrect password. {2 - attempt} attempts remaining.",
+                )
+
+        QMessageBox.critical(self, "Login Failed", "Too many failed attempts.")
+        return None
 
     def init_ui(self):
         # Set up central widget with tabs
@@ -197,7 +224,7 @@ class PasswordManagerApp(QMainWindow):
         self.table.setSortingEnabled(True)  # Enable sorting
 
         # Context menu for table
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.setContextMenuPolicy(QtCoreQt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
 
         layout.addWidget(self.table)
@@ -330,26 +357,7 @@ class PasswordManagerApp(QMainWindow):
 
         layout.addStretch()
 
-    def authenticate(self):
-        for attempt in range(3):
-            password, ok = QInputDialog.getText(
-                self, "Login", "Enter master password:", QLineEdit.Password
-            )
-            if not ok:  # User cancelled
-                return False
-
-            if authenticate(password):
-                return True
-
-            if attempt < 2:
-                QMessageBox.warning(
-                    self,
-                    "Login Failed",
-                    f"Incorrect password. {2 - attempt} attempts remaining.",
-                )
-
-        QMessageBox.critical(self, "Login Failed", "Too many failed attempts.")
-        return False
+    # authenticate() is now replaced by get_master_password()
 
     def refresh_passwords(self):
         """Refresh the password table with current filters"""
@@ -373,6 +381,7 @@ class PasswordManagerApp(QMainWindow):
 
         # Fill table
         self.table.setRowCount(len(passwords))
+
         for row, entry in enumerate(passwords):
             (
                 entry_id,
@@ -392,6 +401,7 @@ class PasswordManagerApp(QMainWindow):
             created_str = time.strftime("%Y-%m-%d", time.localtime(created))
 
             # Format expiry
+            days_left = None
             if expiry:
                 days_left = int((expiry - time.time()) / 86400)
                 if days_left < 0:
@@ -403,7 +413,7 @@ class PasswordManagerApp(QMainWindow):
 
             # Set the items with appropriate colors - FIXED ID DISPLAY
             id_item = QTableWidgetItem(str(entry_id))
-            id_item.setTextAlignment(Qt.AlignCenter)  # Center the ID value
+            id_item.setTextAlignment(QtCoreQt.AlignmentFlag.AlignCenter)  # Center the ID value
             self.table.setItem(row, 0, id_item)
 
             website_item = QTableWidgetItem(website)
@@ -415,22 +425,22 @@ class PasswordManagerApp(QMainWindow):
             self.table.setItem(row, 2, username_item)
 
             password_item = QTableWidgetItem("••••••••")  # Mask password
-            password_item.setData(Qt.UserRole, decrypted)  # Store real password as data
-            password_item.setTextAlignment(Qt.AlignCenter)  # Center the dots
+            password_item.setData(QtCoreQt.ItemDataRole.UserRole, decrypted)  # Store real password as data
+            password_item.setTextAlignment(QtCoreQt.AlignmentFlag.AlignCenter)  # Center the dots
             self.table.setItem(row, 3, password_item)
 
             category_item = QTableWidgetItem(category)
             self.table.setItem(row, 4, category_item)
 
             created_item = QTableWidgetItem(created_str)
-            created_item.setTextAlignment(Qt.AlignCenter)  # Center the date
+            created_item.setTextAlignment(QtCoreQt.AlignmentFlag.AlignCenter)  # Center the date
             self.table.setItem(row, 5, created_item)
 
             expiry_item = QTableWidgetItem(expiry_str)
-            expiry_item.setTextAlignment(Qt.AlignCenter)  # Center the expiry info
-            if expiry and days_left < 0:
+            expiry_item.setTextAlignment(QtCoreQt.AlignmentFlag.AlignCenter)  # Center the expiry info
+            if expiry and days_left is not None and days_left < 0:
                 expiry_item.setForeground(QColor("red"))
-            elif expiry and days_left < 7:
+            elif expiry and days_left is not None and days_left < 7:
                 expiry_item.setForeground(QColor("orange"))
             self.table.setItem(row, 6, expiry_item)
 
@@ -477,7 +487,7 @@ class PasswordManagerApp(QMainWindow):
         # Get password from the third column (index 3) of the selected row
         row = selected[0].row()
         password_item = self.table.item(row, 3)
-        password = password_item.data(Qt.UserRole)  # Get the stored password
+    password = password_item.data(QtCoreQt.ItemDataRole.UserRole)  # Get the stored password
 
         pyperclip.copy(password)
         self.statusBar().showMessage("Password copied to clipboard", 2000)
@@ -494,7 +504,7 @@ class PasswordManagerApp(QMainWindow):
 
         row = selected[0].row()
         password_item = self.table.item(row, 3)
-        password = password_item.data(Qt.UserRole)
+    password = password_item.data(QtCoreQt.ItemDataRole.UserRole)
 
         password_item.setText(password)
 
@@ -590,7 +600,7 @@ class PasswordManagerApp(QMainWindow):
         layout.addRow("", gen_btn)
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, dialog
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, QtCoreQt.Orientation.Horizontal, dialog
         )
         layout.addRow(buttons)
 
@@ -769,7 +779,7 @@ class PasswordManagerApp(QMainWindow):
 
         # Dialog buttons
         buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, dialog
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, QtCoreQt.Orientation.Horizontal, dialog
         )
         layout.addRow(buttons)
 
