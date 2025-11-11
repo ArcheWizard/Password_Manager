@@ -33,18 +33,29 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from utils.auth import authenticate
+from utils.auth import authenticate, set_master_password
 from utils.backup import export_passwords, import_passwords
-from utils.crypto import decrypt_password, encrypt_password
+from utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    is_key_protected,
+    protect_key_with_master_password,
+    set_master_password_context,
+    unprotect_key,
+)
 from utils.database import (
     add_password,
     delete_password,
     get_categories,
+    get_expiring_passwords,
     get_passwords,
     init_db,
     update_password,
+    add_category,
 )
+from utils.logger import get_log_entries
 from utils.password_analysis import evaluate_password_strength, generate_secure_password
+from utils.two_factor import disable_2fa, is_2fa_enabled, setup_totp, verify_totp
 
 
 class PasswordManagerApp(QMainWindow):
@@ -61,8 +72,14 @@ class PasswordManagerApp(QMainWindow):
         if password is None:
             sys.exit(0)
 
-        from utils.crypto import set_master_password_context
-        set_master_password_context(password)
+        # Only set master password context if key is actually protected
+        from utils.crypto import is_key_protected, set_master_password_context
+
+        if is_key_protected():
+            set_master_password_context(password)
+
+        # Store password for later use (e.g., change password, protect key)
+        self._master_password = password
 
         # Create UI
         self.init_ui()
@@ -106,6 +123,18 @@ class PasswordManagerApp(QMainWindow):
         self.backup_tab = QWidget()
         self.central_widget.addTab(self.backup_tab, "Backup")
 
+        # Create the categories tab
+        self.categories_tab = QWidget()
+        self.central_widget.addTab(self.categories_tab, "Categories")
+
+        # Create the settings tab
+        self.settings_tab = QWidget()
+        self.central_widget.addTab(self.settings_tab, "Settings")
+
+        # Create the logs tab
+        self.logs_tab = QWidget()
+        self.central_widget.addTab(self.logs_tab, "Logs")
+
         # Set up the password manager tab
         self.setup_passwords_tab()
 
@@ -114,6 +143,15 @@ class PasswordManagerApp(QMainWindow):
 
         # Set up the backup tab
         self.setup_backup_tab()
+
+        # Set up the categories tab
+        self.setup_categories_tab()
+
+        # Set up the settings tab
+        self.setup_settings_tab()
+
+        # Set up the logs tab
+        self.setup_logs_tab()
 
         # Create toolbar
         self.create_toolbar()
@@ -186,6 +224,18 @@ class PasswordManagerApp(QMainWindow):
         self.show_expired.setChecked(True)
         self.show_expired.stateChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.show_expired)
+
+        # Show expiring soon checkbox
+        self.show_expiring_only = QCheckBox("Expiring Soon (30 days)")
+        self.show_expiring_only.setChecked(False)
+        self.show_expiring_only.stateChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.show_expiring_only)
+
+        # Favorites only checkbox
+        self.favorites_only = QCheckBox("Favorites Only")
+        self.favorites_only.setChecked(False)
+        self.favorites_only.stateChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.favorites_only)
 
         filter_layout.addStretch()
 
@@ -375,9 +425,21 @@ class PasswordManagerApp(QMainWindow):
 
         search_term = self.search_edit.text() if self.search_edit.text() else None
         show_expired = self.show_expired.isChecked()
+        expiring_only = self.show_expiring_only.isChecked()
+        favorites_only_filter = self.favorites_only.isChecked()
 
         # Get passwords with filters
         passwords = get_passwords(category, search_term, show_expired)
+
+        # Additional filtering for expiring soon
+        if expiring_only:
+            current_time = int(time.time())
+            thirty_days = 30 * 86400
+            passwords = [p for p in passwords if p[8] and p[8] <= current_time + thirty_days and p[8] > current_time]
+
+        # Filter favorites only
+        if favorites_only_filter:
+            passwords = [p for p in passwords if p[9]]  # p[9] is favorite column
 
         # Fill table
         self.table.setRowCount(len(passwords))
@@ -487,7 +549,7 @@ class PasswordManagerApp(QMainWindow):
         # Get password from the third column (index 3) of the selected row
         row = selected[0].row()
         password_item = self.table.item(row, 3)
-    password = password_item.data(QtCoreQt.ItemDataRole.UserRole)  # Get the stored password
+        password = password_item.data(QtCoreQt.ItemDataRole.UserRole)  # Get the stored password
 
         pyperclip.copy(password)
         self.statusBar().showMessage("Password copied to clipboard", 2000)
@@ -504,7 +566,7 @@ class PasswordManagerApp(QMainWindow):
 
         row = selected[0].row()
         password_item = self.table.item(row, 3)
-    password = password_item.data(QtCoreQt.ItemDataRole.UserRole)
+        password = password_item.data(QtCoreQt.ItemDataRole.UserRole)
 
         password_item.setText(password)
 
@@ -1205,6 +1267,527 @@ class PasswordManagerApp(QMainWindow):
                 self, "Error", f"An error occurred during the security audit: {str(e)}"
             )
             self.statusBar().showMessage("Security audit failed")
+
+    def setup_categories_tab(self):
+        """Set up the categories management tab"""
+        layout = QVBoxLayout()
+        self.categories_tab.setLayout(layout)
+
+        # Title
+        title = QLabel("<h2>Category Management</h2>")
+        layout.addWidget(title)
+
+        # Categories list
+        list_group = QGroupBox("Existing Categories")
+        list_layout = QVBoxLayout()
+
+        self.categories_list = QTableWidget()
+        self.categories_list.setColumnCount(3)
+        self.categories_list.setHorizontalHeaderLabels(["Name", "Color", "Password Count"])
+        self.categories_list.setSelectionBehavior(QTableWidget.SelectRows)
+        self.categories_list.setEditTriggers(QTableWidget.NoEditTriggers)
+        list_layout.addWidget(self.categories_list)
+
+        list_group.setLayout(list_layout)
+        layout.addWidget(list_group)
+
+        # Add new category section
+        add_group = QGroupBox("Add New Category")
+        add_layout = QFormLayout()
+
+        self.new_category_name = QLineEdit()
+        self.new_category_name.setPlaceholderText("Enter category name...")
+        add_layout.addRow("Name:", self.new_category_name)
+
+        self.new_category_color = QComboBox()
+        colors = ["blue", "red", "green", "purple", "orange", "yellow", "cyan", "magenta", "brown", "pink"]
+        for color in colors:
+            self.new_category_color.addItem(color.capitalize(), color)
+        add_layout.addRow("Color:", self.new_category_color)
+
+        add_category_btn = QPushButton("Add Category")
+        add_category_btn.clicked.connect(self.add_new_category)
+        add_layout.addRow("", add_category_btn)
+
+        add_group.setLayout(add_layout)
+        layout.addWidget(add_group)
+
+        # Refresh button
+        refresh_btn = QPushButton("Refresh Categories")
+        refresh_btn.clicked.connect(self.refresh_categories)
+        layout.addWidget(refresh_btn)
+
+        layout.addStretch()
+
+        # Load categories
+        self.refresh_categories()
+
+    def refresh_categories(self):
+        """Refresh the categories list"""
+        try:
+            categories = get_categories()
+            passwords = get_passwords()
+
+            # Count passwords per category
+            category_counts = {}
+            for p in passwords:
+                cat = p[4]  # category column
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+
+            self.categories_list.setRowCount(len(categories))
+
+            for row, (name, color) in enumerate(categories):
+                name_item = QTableWidgetItem(name)
+                self.categories_list.setItem(row, 0, name_item)
+
+                color_item = QTableWidgetItem(color)
+                color_item.setForeground(QColor(color))
+                self.categories_list.setItem(row, 1, color_item)
+
+                count = category_counts.get(name, 0)
+                count_item = QTableWidgetItem(str(count))
+                count_item.setTextAlignment(QtCoreQt.AlignmentFlag.AlignCenter)
+                self.categories_list.setItem(row, 2, count_item)
+
+            self.statusBar().showMessage(f"{len(categories)} categories loaded")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not load categories: {str(e)}")
+
+    def add_new_category(self):
+        """Add a new category"""
+        name = self.new_category_name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Error", "Please enter a category name.")
+            return
+
+        color = self.new_category_color.currentData()
+
+        try:
+            add_category(name, color)
+            QMessageBox.information(self, "Success", f"Category '{name}' added successfully!")
+
+            # Refresh both the categories list and the passwords tab combo
+            self.refresh_categories()
+
+            # Update the category combo in passwords tab
+            self.category_combo.clear()
+            self.category_combo.addItem("All Categories")
+            categories = get_categories()
+            for cat_name, _ in categories:
+                self.category_combo.addItem(cat_name)
+
+            # Clear input
+            self.new_category_name.clear()
+
+            self.statusBar().showMessage(f"Category '{name}' added")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to add category: {str(e)}")
+
+    def setup_settings_tab(self):
+        """Set up the settings tab with master password, 2FA, and key protection options"""
+        layout = QVBoxLayout()
+        self.settings_tab.setLayout(layout)
+
+        # Title
+        title = QLabel("<h2>Settings</h2>")
+        layout.addWidget(title)
+
+        # Master Password Section
+        mp_group = QGroupBox("Master Password")
+        mp_layout = QVBoxLayout()
+
+        change_pw_btn = QPushButton("Change Master Password")
+        change_pw_btn.clicked.connect(self.change_master_password)
+        mp_layout.addWidget(change_pw_btn)
+
+        mp_group.setLayout(mp_layout)
+        layout.addWidget(mp_group)
+
+        # Two-Factor Authentication Section
+        twofa_group = QGroupBox("Two-Factor Authentication (TOTP)")
+        twofa_layout = QVBoxLayout()
+
+        self.twofa_status_label = QLabel()
+        twofa_layout.addWidget(self.twofa_status_label)
+
+        self.setup_2fa_btn = QPushButton("Setup 2FA")
+        self.setup_2fa_btn.clicked.connect(self.setup_2fa)
+        twofa_layout.addWidget(self.setup_2fa_btn)
+
+        self.disable_2fa_btn = QPushButton("Disable 2FA")
+        self.disable_2fa_btn.clicked.connect(self.disable_2fa)
+        twofa_layout.addWidget(self.disable_2fa_btn)
+
+        twofa_group.setLayout(twofa_layout)
+        layout.addWidget(twofa_group)
+
+        # Key Protection Section
+        key_group = QGroupBox("Encryption Key Protection")
+        key_layout = QVBoxLayout()
+
+        key_info = QLabel(
+            "Key protection encrypts your vault key with your master password,\n"
+            "providing additional security if the key file is stolen."
+        )
+        key_info.setWordWrap(True)
+        key_layout.addWidget(key_info)
+
+        self.key_status_label = QLabel()
+        key_layout.addWidget(self.key_status_label)
+
+        self.protect_key_btn = QPushButton("Enable Key Protection")
+        self.protect_key_btn.clicked.connect(self.toggle_key_protection)
+        key_layout.addWidget(self.protect_key_btn)
+
+        key_group.setLayout(key_layout)
+        layout.addWidget(key_group)
+
+        # System Information Section
+        sys_group = QGroupBox("System Information")
+        sys_layout = QVBoxLayout()
+
+        self.system_info_label = QLabel()
+        sys_layout.addWidget(self.system_info_label)
+
+        refresh_info_btn = QPushButton("Refresh Info")
+        refresh_info_btn.clicked.connect(self.update_system_info)
+        sys_layout.addWidget(refresh_info_btn)
+
+        sys_group.setLayout(sys_layout)
+        layout.addWidget(sys_group)
+
+        layout.addStretch()
+
+        # NOW update all status labels and buttons (after widgets are created)
+        self.update_2fa_status()
+        self.update_2fa_buttons()
+        self.update_key_protection_status()
+        self.update_system_info()
+
+    def setup_logs_tab(self):
+        """Set up the activity logs tab"""
+        layout = QVBoxLayout()
+        self.logs_tab.setLayout(layout)
+
+        # Title
+        title = QLabel("<h2>Activity Logs</h2>")
+        layout.addWidget(title)
+
+        # Controls
+        controls_layout = QHBoxLayout()
+
+        refresh_logs_btn = QPushButton("Refresh Logs")
+        refresh_logs_btn.clicked.connect(self.refresh_logs)
+        controls_layout.addWidget(refresh_logs_btn)
+
+        clear_display_btn = QPushButton("Clear Display")
+        clear_display_btn.clicked.connect(lambda: self.logs_text.clear())
+        controls_layout.addWidget(clear_display_btn)
+
+        controls_layout.addStretch()
+        layout.addLayout(controls_layout)
+
+        # Logs display (read-only text area)
+        from PyQt5.QtWidgets import QTextEdit
+        self.logs_text = QTextEdit()
+        self.logs_text.setReadOnly(True)
+        self.logs_text.setFontFamily("Courier")
+        layout.addWidget(self.logs_text)
+
+        # Load logs
+        self.refresh_logs()
+
+    def update_2fa_status(self):
+        """Update the 2FA status label"""
+        if is_2fa_enabled():
+            self.twofa_status_label.setText("Status: ✓ Enabled")
+            self.twofa_status_label.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.twofa_status_label.setText("Status: ✗ Disabled")
+            self.twofa_status_label.setStyleSheet("color: red; font-weight: bold;")
+
+    def update_2fa_buttons(self):
+        """Update 2FA button states based on whether 2FA is enabled"""
+        enabled = is_2fa_enabled()
+        self.setup_2fa_btn.setEnabled(not enabled)
+        self.disable_2fa_btn.setEnabled(enabled)
+
+    def update_key_protection_status(self):
+        """Update the key protection status label"""
+        if is_key_protected():
+            self.key_status_label.setText("Status: ✓ Key is protected")
+            self.key_status_label.setStyleSheet("color: green; font-weight: bold;")
+            self.protect_key_btn.setText("Disable Key Protection")
+        else:
+            self.key_status_label.setText("Status: ✗ Key is not protected")
+            self.key_status_label.setStyleSheet("color: orange; font-weight: bold;")
+            self.protect_key_btn.setText("Enable Key Protection")
+
+    def update_system_info(self):
+        """Update system information display"""
+        import os
+        passwords = get_passwords()
+        categories = get_categories()
+
+        info_text = f"Password Count: {len(passwords)}\n"
+        info_text += f"Category Count: {len(categories)}\n"
+        info_text += f"2FA Status: {'Enabled' if is_2fa_enabled() else 'Disabled'}\n"
+        info_text += f"Key Protection: {'Enabled' if is_key_protected() else 'Disabled'}\n"
+
+        # File sizes
+        if os.path.exists("passwords.db"):
+            size = os.path.getsize("passwords.db") / 1024
+            info_text += f"Database Size: {size:.2f} KB\n"
+
+        self.system_info_label.setText(info_text)
+
+    def refresh_logs(self):
+        """Refresh the activity logs display"""
+        try:
+            logs = get_log_entries(count=100)
+            if logs:
+                self.logs_text.setPlainText("\n".join(logs))
+                self.statusBar().showMessage(f"Loaded {len(logs)} log entries")
+            else:
+                self.logs_text.setPlainText("No log entries found.")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not load logs: {str(e)}")
+
+    def change_master_password(self):
+        """Dialog to change the master password"""
+        from utils.auth import verify_password
+        import json
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Change Master Password")
+        dialog.setModal(True)
+
+        layout = QFormLayout()
+
+        # Current password
+        current_pw_input = QLineEdit()
+        current_pw_input.setEchoMode(QLineEdit.Password)
+        layout.addRow("Current Password:", current_pw_input)
+
+        # New password
+        new_pw_input = QLineEdit()
+        new_pw_input.setEchoMode(QLineEdit.Password)
+        layout.addRow("New Password:", new_pw_input)
+
+        # Confirm new password
+        confirm_pw_input = QLineEdit()
+        confirm_pw_input.setEchoMode(QLineEdit.Password)
+        layout.addRow("Confirm Password:", confirm_pw_input)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            QtCoreQt.Orientation.Horizontal,
+            dialog
+        )
+        layout.addRow(buttons)
+
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        dialog.setLayout(layout)
+
+        if dialog.exec_() == QDialog.Accepted:
+            current_pass = current_pw_input.text()
+            new_pass = new_pw_input.text()
+            confirm_pass = confirm_pw_input.text()
+
+            # Validate current password
+            try:
+                with open("auth.json", "r") as f:
+                    auth_data = json.load(f)
+                    auth_hash = auth_data["master_hash"]
+
+                if not verify_password(auth_hash, current_pass):
+                    QMessageBox.warning(self, "Error", "Current password is incorrect.")
+                    return
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Could not verify password: {str(e)}")
+                return
+
+            # Validate new password
+            if len(new_pass) < 8:
+                QMessageBox.warning(self, "Error", "New password must be at least 8 characters long.")
+                return
+
+            if new_pass != confirm_pass:
+                QMessageBox.warning(self, "Error", "New passwords do not match.")
+                return
+
+            # Check password strength
+            strength = evaluate_password_strength(new_pass)
+            score = strength.get("score", 0) if isinstance(strength, dict) else 0
+            feedback = strength.get("feedback", "") if isinstance(strength, dict) else ""
+
+            if score < 3:
+                reply = QMessageBox.question(
+                    self,
+                    "Weak Password",
+                    f"Password strength: {score}/5 - {feedback}\n\n"
+                    "This password is considered weak. Continue anyway?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+
+            # Update password
+            try:
+                set_master_password(new_pass)
+                set_master_password_context(new_pass)
+
+                # If key is protected, suggest re-protecting with new password
+                if is_key_protected():
+                    reply = QMessageBox.question(
+                        self,
+                        "Re-protect Key",
+                        "Your encryption key is currently protected with the old master password.\n\n"
+                        "Would you like to re-protect it with the new master password?",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if reply == QMessageBox.Yes:
+                        try:
+                            from utils.crypto import unprotect_key
+                            unprotect_key(current_pass)
+                            protect_key_with_master_password(new_pass)
+                            QMessageBox.information(self, "Success", "Master password changed and key re-protected successfully!")
+                        except Exception as e:
+                            QMessageBox.warning(self, "Warning", f"Password changed but key re-protection failed: {str(e)}")
+                else:
+                    QMessageBox.information(self, "Success", "Master password changed successfully!")
+
+                self.statusBar().showMessage("Master password updated")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to change password: {str(e)}")
+
+    def setup_2fa(self):
+        """Setup TOTP two-factor authentication"""
+        if is_2fa_enabled():
+            QMessageBox.information(self, "2FA", "Two-factor authentication is already enabled.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Setup 2FA",
+            "This will generate a new TOTP secret and QR code.\n\n"
+            "You'll need to scan the QR code with your authenticator app.\n\n"
+            "Continue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                secret = setup_totp()
+
+                msg = QMessageBox(self)
+                msg.setWindowTitle("2FA Setup Complete")
+                msg.setText(
+                    "Two-factor authentication has been set up!\n\n"
+                    f"Secret: {secret}\n\n"
+                    "A QR code has been saved to 'totp_qr.png'.\n"
+                    "Scan it with your authenticator app (Google Authenticator, Authy, etc.).\n\n"
+                    "You will need to enter a code from your app on next login."
+                )
+                msg.setIcon(QMessageBox.Information)
+
+                # Try to show QR code if file exists
+                import os
+                if os.path.exists("totp_qr.png"):
+                    from PyQt5.QtGui import QPixmap
+                    pixmap = QPixmap("totp_qr.png")
+                    if not pixmap.isNull():
+                        pixmap = pixmap.scaled(300, 300, QtCoreQt.AspectRatioMode.KeepAspectRatio)
+                        msg.setIconPixmap(pixmap)
+
+                msg.exec_()
+
+                self.update_2fa_status()
+                self.update_2fa_buttons()
+                self.update_system_info()
+
+                self.statusBar().showMessage("2FA enabled successfully")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to setup 2FA: {str(e)}")
+
+    def disable_2fa(self):
+        """Disable two-factor authentication"""
+        if not is_2fa_enabled():
+            QMessageBox.information(self, "2FA", "Two-factor authentication is already disabled.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Disable 2FA",
+            "Are you sure you want to disable two-factor authentication?\n\n"
+            "This will reduce the security of your account.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                disable_2fa()
+                QMessageBox.information(self, "Success", "Two-factor authentication has been disabled.")
+
+                self.update_2fa_status()
+                self.update_2fa_buttons()
+                self.update_system_info()
+
+                self.statusBar().showMessage("2FA disabled")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to disable 2FA: {str(e)}")
+
+    def toggle_key_protection(self):
+        """Toggle encryption key protection on/off"""
+        try:
+            if is_key_protected():
+                # Disable protection
+                reply = QMessageBox.question(
+                    self,
+                    "Disable Key Protection",
+                    "This will decrypt your vault key and store it in plaintext.\n\n"
+                    "Continue?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+
+                if reply == QMessageBox.Yes:
+                    from utils.crypto import unprotect_key
+                    unprotect_key(self._master_password)
+                    # Clear the context since we're back to plaintext
+                    set_master_password_context(None)
+                    QMessageBox.information(self, "Success", "Key protection disabled. Your key is now stored in plaintext.")
+                    self.update_key_protection_status()
+                    self.update_system_info()
+                    self.statusBar().showMessage("Key protection disabled")
+            else:
+                # Enable protection
+                reply = QMessageBox.question(
+                    self,
+                    "Enable Key Protection",
+                    "This will encrypt your vault key with your master password.\n\n"
+                    "You'll need to enter your master password at login to decrypt it.\n\n"
+                    "Continue?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+
+                if reply == QMessageBox.Yes:
+                    # Pass the stored master password explicitly
+                    protect_key_with_master_password(self._master_password)
+                    # Set the context so the key can be loaded
+                    set_master_password_context(self._master_password)
+                    QMessageBox.information(
+                        self,
+                        "Success",
+                        "Key protection enabled. Your vault key is now encrypted with your master password."
+                    )
+                    self.update_key_protection_status()
+                    self.update_system_info()
+                    self.statusBar().showMessage("Key protection enabled")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to toggle key protection: {str(e)}")
 
 
 def main():

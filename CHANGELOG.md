@@ -12,6 +12,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Clipboard auto-clear and additional UX hardening
 - CI pipeline and code quality tooling
 
+## [1.8.1] - 2025-11-11
+
+### Added
+
+- Improved GUI responsiveness
+- Enhanced error handling
+
+### Fixed
+
+- Minor bug fixes
+- UI improvements
+
+## [1.8.0] - Previous Release
+
+- Full feature set as documented
+
 ## [1.8.0] - 2025-10-27
 
 ### Added
