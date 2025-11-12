@@ -95,8 +95,8 @@ def import_passwords(filename: str, master_password: str) -> int:
     import sqlite3
     import time
 
-    from utils.database import DB_FILE
-    from utils.logger import log_error, log_info
+    from secure_password_manager.utils.database import _get_db_file
+    from secure_password_manager.utils.logger import log_error, log_info
 
     if not os.path.exists(filename):
         log_error(f"Import failed: File {filename} not found")
@@ -137,7 +137,7 @@ def import_passwords(filename: str, master_password: str) -> int:
         # Add each password individually to avoid transaction locks
         # Bulk insert within a single transaction to minimize locks
         count = 0
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(_get_db_file())
         try:
             cursor = conn.cursor()
             now = int(time.time())

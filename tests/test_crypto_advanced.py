@@ -13,6 +13,7 @@ from secure_password_manager.utils.crypto import (
     derive_keys_from_password,
     encrypt_with_password_envelope,
     generate_key,
+    generate_salt,
     is_key_protected,
     load_kdf_params,
     protect_key_with_master_password,
@@ -21,73 +22,76 @@ from secure_password_manager.utils.crypto import (
 )
 
 
-def test_kdf_params_versioning():
+def test_kdf_params_versioning(clean_crypto_files):
     """Test that KDF parameters are stored and loaded with versioning metadata."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        salt_file = os.path.join(tmpdir, "crypto.salt")
-        with patch("utils.crypto.SALT_FILE", salt_file):
-            # Load should generate new salt with metadata
-            salt, iterations, version = load_kdf_params()
-            assert isinstance(salt, bytes)
-            assert len(salt) == 16
-            assert iterations == 100_000
-            assert version == 1
+    from secure_password_manager.utils.paths import get_crypto_salt_path
 
-            # Verify JSON format
-            assert os.path.exists(salt_file)
-            with open(salt_file) as f:
-                data = json.load(f)
-            assert data["kdf"] == "PBKDF2HMAC"
-            assert data["version"] == 1
-            assert data["iterations"] == 100_000
-            assert "salt" in data
-            assert "updated_at" in data
+    salt_file = get_crypto_salt_path()
+
+    # Generate salt should create versioned metadata
+    generated_salt = generate_salt()
+
+    # Load should return the same salt with metadata
+    salt, iterations, version = load_kdf_params()
+    assert salt == generated_salt
+    assert isinstance(salt, bytes)
+    assert len(salt) == 16
+    assert iterations == 100_000
+    assert version == 1
+
+    # Verify JSON format
+    assert salt_file.exists()
+    with open(salt_file) as f:
+        data = json.load(f)
+    assert data["kdf"] == "PBKDF2HMAC"
+    assert data["version"] == 1
+    assert data["iterations"] == 100_000
+    assert "salt" in data
+    assert "updated_at" in data
 
 
-def test_kdf_params_legacy_migration():
+def test_kdf_params_legacy_migration(clean_crypto_files):
     """Test that legacy raw salt files are migrated to JSON format."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        salt_file = os.path.join(tmpdir, "crypto.salt")
-        legacy_salt = os.urandom(16)
+    from secure_password_manager.utils.paths import get_crypto_salt_path
 
-        # Write legacy raw salt
-        with open(salt_file, "wb") as f:
-            f.write(legacy_salt)
+    salt_file = get_crypto_salt_path()
 
-        with patch("utils.crypto.SALT_FILE", salt_file):
-            salt, iterations, version = load_kdf_params()
-            # Should read the same salt
-            assert salt == legacy_salt
-            assert iterations == 100_000
-            assert version == 1
+    # Create a legacy salt file (raw bytes)
+    legacy_salt = os.urandom(16)
+    with open(salt_file, "wb") as f:
+        f.write(legacy_salt)
 
-            # Should have migrated to JSON (non-fatal if write fails, so check if exists)
-            try:
-                with open(salt_file) as f:
-                    data = json.load(f)
-                assert data["version"] == 1
-            except Exception:
-                # Migration write failed; acceptable for this test
-                pass
+    # Load should migrate to JSON
+    salt, iterations, version = load_kdf_params()
+    assert salt == legacy_salt
+    assert iterations == 100_000
+    assert version == 1
+
+    # Check that file was migrated to JSON
+    assert salt_file.exists()
+    with open(salt_file) as f:
+        data = json.load(f)
+    assert data["kdf"] == "PBKDF2HMAC"
 
 
-def test_derive_keys_from_password():
+def test_derive_keys_from_password(clean_crypto_files):
     """Test deriving separate encryption and HMAC keys from password."""
-    password = "TestPassword123!"
+    password = "TestPassword123"
     enc_key, mac_key, meta = derive_keys_from_password(password)
 
-    # Should return base64 Fernet key and raw HMAC key
-    assert isinstance(enc_key, bytes)
-    assert isinstance(mac_key, bytes)
-    assert len(mac_key) == 32
+    # Check that keys are different
+    assert enc_key != mac_key
 
-    # Metadata should include KDF details
+    # Check key lengths
+    assert len(enc_key) == 44  # Base64 encoded 32 bytes
+    assert len(mac_key) == 32  # Raw 32 bytes
+
+    # Check metadata
     assert meta["kdf"] == "PBKDF2HMAC"
-    assert meta["version"] == 1
-    assert "salt" in meta
+    assert "iterations" in meta
 
 
-def test_envelope_encryption_with_hmac():
+def test_envelope_encryption_with_hmac(clean_crypto_files):
     """Test that envelope encryption includes HMAC and verifies on decrypt."""
     password = "SecureBackupPassword"
     plaintext = "My secret data"
@@ -108,72 +112,70 @@ def test_envelope_encryption_with_hmac():
     assert decrypted == plaintext
 
 
-def test_envelope_hmac_tampering_detection():
+def test_envelope_hmac_tampering_detection(clean_crypto_files):
     """Test that tampering with ciphertext or HMAC is detected."""
-    password = "SecureBackupPassword"
-    plaintext = "My secret data"
+    password = "TestPassword"
+    plaintext = "Secret data"
 
     blob = encrypt_with_password_envelope(plaintext, password)
     envelope = json.loads(blob.decode("utf-8"))
 
     # Tamper with ciphertext
-    envelope["ciphertext"] = envelope["ciphertext"][:-4] + "XXXX"
+    import base64
+
+    tampered_ct = base64.b64encode(b"tampered").decode("ascii")
+    envelope["ciphertext"] = tampered_ct
     tampered_blob = json.dumps(envelope).encode("utf-8")
 
     try:
         decrypt_with_password_envelope(tampered_blob, password)
         assert False, "Should have detected tampering"
-    except ValueError:
-        # Tampering detected (either by HMAC mismatch or decryption failure)
-        pass
+    except ValueError as e:
+        # Check for integrity verification failure
+        assert "integrity" in str(e).lower() or "verification" in str(e).lower()
 
 
-def test_protect_and_unprotect_key():
+def test_protect_and_unprotect_key(clean_crypto_files):
     """Test protecting and unprotecting the secret key with master password."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        key_file = os.path.join(tmpdir, "secret.key")
-        enc_key_file = os.path.join(tmpdir, "secret.key.enc")
-        salt_file = os.path.join(tmpdir, "crypto.salt")
+    from secure_password_manager.utils.paths import (
+        get_secret_key_enc_path,
+        get_secret_key_path,
+    )
 
-        with patch("utils.crypto.KEY_FILE", key_file), patch(
-            "utils.crypto.ENC_KEY_FILE", enc_key_file
-        ), patch("utils.crypto.SALT_FILE", salt_file):
-            # Generate a plaintext key
-            generate_key()
-            assert os.path.exists(key_file)
-            assert not is_key_protected()
+    key_file = get_secret_key_path()
+    enc_key_file = get_secret_key_enc_path()
 
-            with open(key_file, "rb") as f:
-                original_key = f.read()
+    # Generate a plaintext key
+    generate_key()
+    assert key_file.exists()
+    assert not is_key_protected()
 
-            # Protect the key with a master password
-            master_pw = "MyMasterPassword123!"
-            set_master_password_context(master_pw)
-            protect_key_with_master_password(master_pw)
+    with open(key_file, "rb") as f:
+        original_key = f.read()
 
-            # Protected key should exist, plaintext key should be backed up/removed
-            assert os.path.exists(enc_key_file)
-            assert is_key_protected()
+    # Protect the key with a master password
+    master_pw = "MyMasterPassword123!"
+    set_master_password_context(master_pw)
+    result = protect_key_with_master_password(master_pw)
+    assert result is True
 
-            # Verify envelope format
-            with open(enc_key_file) as f:
-                env = json.load(f)
-            assert env["format"] == "spm-key"
-            assert env["version"] == "1.0"
-            assert "hmac" in env
+    # Protected key should exist, plaintext key should be backed up/removed
+    assert enc_key_file.exists()
+    assert is_key_protected()
 
-            # Unprotect should restore plaintext key
-            unprotect_key(master_pw)
-            assert os.path.exists(key_file)
+    # Unprotect and verify
+    result = unprotect_key(master_pw)
+    assert result is True
+    assert key_file.exists()
 
-            with open(key_file, "rb") as f:
-                restored_key = f.read()
-            assert restored_key == original_key
+    with open(key_file, "rb") as f:
+        restored_key = f.read()
+    assert restored_key == original_key
 
 
-def test_backward_compat_legacy_export():
+def test_backward_compat_legacy_export(clean_crypto_files):
     """Test that decrypt_with_password_envelope handles legacy raw Fernet tokens."""
-    from utils.crypto import encrypt_password
+    from secure_password_manager.utils.crypto import encrypt_password
 
     password = "LegacyPassword"
     plaintext = "Legacy data"

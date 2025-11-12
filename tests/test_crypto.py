@@ -8,11 +8,16 @@ from secure_password_manager.utils.crypto import (
     encrypt_password,
     generate_key,
     load_key,
+    set_master_password_context,
 )
 
 
-def test_encryption_decryption():
+def test_encryption_decryption(clean_crypto_files):
     """Test that encryption and decryption functions work correctly."""
+    # Generate a key for testing (plaintext mode, no master password protection)
+    generate_key()
+
+    # Don't set master password context for plaintext key mode
     original = "mySecretPassword123!"
     encrypted = encrypt_password(original)
     decrypted = decrypt_password(encrypted)
@@ -23,24 +28,17 @@ def test_encryption_decryption():
     assert decrypted == original
 
 
-def test_key_generation_and_loading():
+def test_key_generation_and_loading(clean_crypto_files):
     """Test that key generation and loading work properly."""
-    # Remove existing key file if present
-    if os.path.exists("secret.key"):
-        os.rename("secret.key", "secret.key.bak")
+    from secure_password_manager.utils.paths import get_secret_key_path
 
-    try:
-        # Test that generate_key creates a file
-        generate_key()
-        assert os.path.exists("secret.key")
+    key_path = get_secret_key_path()
 
-        # Test that load_key returns bytes
-        key = load_key()
-        assert isinstance(key, bytes)
-        assert len(key) > 0
-    finally:
-        # Restore original key file if existed
-        if os.path.exists("secret.key.bak"):
-            os.replace("secret.key.bak", "secret.key")
-        elif os.path.exists("secret.key"):
-            os.remove("secret.key")
+    # Test that generate_key creates a file
+    generate_key()
+    assert key_path.exists()
+
+    # Test that load_key returns bytes (plaintext mode)
+    key = load_key()
+    assert isinstance(key, bytes)
+    assert len(key) > 0

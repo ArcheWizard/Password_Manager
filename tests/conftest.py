@@ -1,105 +1,106 @@
-"""Pytest configuration and fixtures for Password Manager tests."""
+"""Pytest configuration and fixtures."""
 
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture
 def test_env(tmp_path, monkeypatch):
-    """
-    Set up a clean test environment for each test.
+    """Create isolated test environment with temporary directories."""
+    # Create temporary directories
+    data_dir = tmp_path / ".data"
+    data_dir.mkdir()
 
-    This fixture:
-    - Creates a temporary directory for test data
-    - Sets environment variables to use the temp directory
-    - Patches the paths module to use the temp directory
-    - Cleans up after each test
-    """
-    # Create test data directory
-    test_data_dir = tmp_path / ".data"
-    test_data_dir.mkdir()
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
 
-    # Set environment variables for XDG directories
-    monkeypatch.setenv("XDG_DATA_HOME", str(test_data_dir))
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(test_data_dir))
-    monkeypatch.setenv("XDG_CACHE_HOME", str(test_data_dir))
-
-    # Store original working directory
-    original_cwd = os.getcwd()
-
-    # Change to temp directory
-    os.chdir(tmp_path)
-
-    # Patch the paths module to force development mode in temp directory
+    # Patch all path functions to use temp directories
     from secure_password_manager.utils import paths
 
-    original_get_project_root = paths.get_project_root
-    original_is_dev_mode = paths.is_development_mode
-
-    def mock_get_project_root():
-        return tmp_path
-
-    def mock_is_dev_mode():
-        return True
-
-    monkeypatch.setattr(paths, "get_project_root", mock_get_project_root)
-    monkeypatch.setattr(paths, "is_development_mode", mock_is_dev_mode)
-
-    yield tmp_path
-
-    # Restore original working directory
-    os.chdir(original_cwd)
-
-
-@pytest.fixture(scope="function")
-def clean_crypto_files(test_env):
-    """Remove any crypto-related files before and after tests."""
-    from secure_password_manager.utils.paths import (
-        get_auth_json_path,
-        get_crypto_salt_path,
-        get_secret_key_enc_path,
-        get_secret_key_path,
+    monkeypatch.setattr(paths, "get_data_dir", lambda: data_dir)
+    monkeypatch.setattr(paths, "get_log_dir", lambda: logs_dir)
+    monkeypatch.setattr(paths, "get_database_path", lambda: data_dir / "passwords.db")
+    monkeypatch.setattr(paths, "get_secret_key_path", lambda: data_dir / "secret.key")
+    monkeypatch.setattr(
+        paths, "get_secret_key_enc_path", lambda: data_dir / "secret.key.enc"
+    )
+    monkeypatch.setattr(paths, "get_crypto_salt_path", lambda: data_dir / "crypto.salt")
+    monkeypatch.setattr(paths, "get_auth_json_path", lambda: data_dir / "auth.json")
+    monkeypatch.setattr(
+        paths, "get_totp_config_path", lambda: data_dir / "totp_config.json"
+    )
+    monkeypatch.setattr(paths, "get_backup_dir", lambda: data_dir / "backups")
+    monkeypatch.setattr(
+        paths, "get_breach_cache_path", lambda: data_dir / "breach_cache.json"
     )
 
-    files_to_clean = [
-        get_secret_key_path(),
-        get_secret_key_enc_path(),
-        get_crypto_salt_path(),
-        get_auth_json_path(),
+    # Reset crypto module state
+    from secure_password_manager.utils import crypto
+
+    crypto._MASTER_PW_CONTEXT = None
+
+    yield {
+        "data_dir": data_dir,
+        "logs_dir": logs_dir,
+    }
+
+    # Cleanup: reset crypto context
+    crypto._MASTER_PW_CONTEXT = None
+
+
+@pytest.fixture
+def clean_crypto_files(test_env):
+    """Provide clean crypto environment for each test."""
+    data_dir = test_env["data_dir"]
+
+    # Remove any existing crypto files
+    crypto_files = [
+        data_dir / "secret.key",
+        data_dir / "secret.key.enc",
+        data_dir / "secret.key.bak",
+        data_dir / "crypto.salt",
     ]
 
-    # Clean before test
-    for file_path in files_to_clean:
-        if file_path.exists():
-            file_path.unlink()
+    for file in crypto_files:
+        if file.exists():
+            file.unlink()
 
-    yield
+    # Reset crypto module context
+    from secure_password_manager.utils import crypto
 
-    # Clean after test
-    for file_path in files_to_clean:
-        if file_path.exists():
-            file_path.unlink()
+    crypto._MASTER_PW_CONTEXT = None
+
+    yield data_dir
+
+    # Cleanup after test
+    crypto._MASTER_PW_CONTEXT = None
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def clean_database(test_env):
-    """Remove database file before and after tests."""
+    """Provide clean database for each test."""
+    from secure_password_manager.utils.database import init_db
     from secure_password_manager.utils.paths import get_database_path
 
     db_path = get_database_path()
 
-    # Clean before test
+    # Remove existing database
     if db_path.exists():
         db_path.unlink()
 
-    yield
+    # Initialize fresh database
+    init_db()
 
-    # Clean after test
+    yield db_path
+
+    # Cleanup
     if db_path.exists():
         db_path.unlink()

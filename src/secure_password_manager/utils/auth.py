@@ -6,8 +6,10 @@ import os
 
 from secure_password_manager.utils.paths import get_auth_json_path
 
-# Get the auth file path
-AUTH_FILE = str(get_auth_json_path())
+
+def _get_auth_file() -> str:
+    """Get the auth file path."""
+    return str(get_auth_json_path())
 
 
 def hash_password(password: str) -> str:
@@ -23,16 +25,18 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
 def set_master_password(password: str) -> None:
     """Set or update the master password."""
     hashed = hash_password(password)
-    with open(AUTH_FILE, "w") as f:
+    auth_file = _get_auth_file()
+    with open(auth_file, "w") as f:
         json.dump({"master_hash": hashed}, f)
 
 
 def authenticate(password: str) -> bool:
     """Authenticate with the master password."""
-    if not os.path.exists(AUTH_FILE):
+    auth_file = _get_auth_file()
+    if not os.path.exists(auth_file):
         return False
 
-    with open(AUTH_FILE, "r") as f:
+    with open(auth_file, "r") as f:
         auth_data = json.load(f)
 
     return verify_password(auth_data["master_hash"], password)

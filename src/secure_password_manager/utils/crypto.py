@@ -17,11 +17,7 @@ from secure_password_manager.utils.paths import (
     get_secret_key_path,
 )
 
-# File paths
-KEY_FILE = str(get_secret_key_path())
-ENC_KEY_FILE = str(get_secret_key_enc_path())
-SALT_FILE = str(get_crypto_salt_path())
-
+# Constants
 CURRENT_KDF_VERSION = 1
 DEFAULT_ITERATIONS = 100_000
 
@@ -31,6 +27,21 @@ _MASTER_PW_CONTEXT: Optional[str] = None
 
 def _now_ts() -> int:
     return int(time.time())
+
+
+def _get_key_file() -> str:
+    """Get the secret key file path."""
+    return str(get_secret_key_path())
+
+
+def _get_enc_key_file() -> str:
+    """Get the encrypted secret key file path."""
+    return str(get_secret_key_enc_path())
+
+
+def _get_salt_file() -> str:
+    """Get the salt file path."""
+    return str(get_crypto_salt_path())
 
 
 def generate_salt() -> bytes:
@@ -44,20 +55,21 @@ def generate_salt() -> bytes:
         "updated_at": _now_ts(),
     }
     # Store JSON for forward compatibility
-    with open(SALT_FILE, "w") as salt_file:
+    with open(_get_salt_file(), "w") as salt_file:
         json.dump(data, salt_file)
     return salt
 
 
 def load_kdf_params() -> Tuple[bytes, int, int]:
     """Load KDF salt, iterations, and version. Accepts legacy raw salt file."""
-    if not os.path.exists(SALT_FILE):
+    salt_file = _get_salt_file()
+    if not os.path.exists(salt_file):
         salt = generate_salt()
         return salt, DEFAULT_ITERATIONS, CURRENT_KDF_VERSION
 
     # Try JSON format first
     try:
-        with open(SALT_FILE) as f:
+        with open(salt_file) as f:
             data = json.load(f)
         salt_b = base64.b64decode(data["salt"])
         iterations = int(data.get("iterations", DEFAULT_ITERATIONS))
@@ -65,7 +77,7 @@ def load_kdf_params() -> Tuple[bytes, int, int]:
         return salt_b, iterations, version
     except Exception:
         # Legacy: raw salt bytes
-        with open(SALT_FILE, "rb") as f:
+        with open(salt_file, "rb") as f:
             salt_b = f.read()
         # Migrate to JSON without changing the salt value
         data = {
@@ -76,7 +88,7 @@ def load_kdf_params() -> Tuple[bytes, int, int]:
             "updated_at": _now_ts(),
         }
         try:
-            with open(SALT_FILE, "w") as wf:
+            with open(salt_file, "w") as wf:
                 json.dump(data, wf)
         except Exception:
             # Non-fatal; continue with legacy params
@@ -133,13 +145,13 @@ def set_master_password_context(password: Optional[str]) -> None:
 
 def is_key_protected() -> bool:
     """Return True if the encryption key is stored in protected form."""
-    return os.path.exists(ENC_KEY_FILE)
+    return os.path.exists(_get_enc_key_file())
 
 
 def generate_key() -> None:
     """Generate and save a plaintext encryption key (legacy/default)."""
     key = Fernet.generate_key()
-    with open(KEY_FILE, "wb") as key_file:
+    with open(_get_key_file(), "wb") as key_file:
         key_file.write(key)
 
 
@@ -152,10 +164,13 @@ def protect_key_with_master_password(master_password: Optional[str] = None) -> b
     if not pw:
         raise ValueError("Master password context not set")
 
+    key_file = _get_key_file()
+    enc_key_file = _get_enc_key_file()
+
     # Load or generate the plaintext key
-    if not os.path.exists(KEY_FILE):
+    if not os.path.exists(key_file):
         generate_key()
-    with open(KEY_FILE, "rb") as f:
+    with open(key_file, "rb") as f:
         key_bytes = f.read()
 
     enc_key, mac_key, kdf_meta = derive_keys_from_password(pw)
@@ -172,18 +187,18 @@ def protect_key_with_master_password(master_password: Optional[str] = None) -> b
         "hmac_alg": "HMAC-SHA256",
     }
 
-    tmp_path = ENC_KEY_FILE + ".tmp"
+    tmp_path = enc_key_file + ".tmp"
     with open(tmp_path, "w") as f:
         json.dump(envelope, f)
-    os.replace(tmp_path, ENC_KEY_FILE)
+    os.replace(tmp_path, enc_key_file)
 
     # Backup and remove plaintext key
     try:
-        os.replace(KEY_FILE, f"{KEY_FILE}.bak{_now_ts()}")
+        os.replace(key_file, f"{key_file}.bak{_now_ts()}")
     except Exception:
         # If replace fails, try to remove
         try:
-            os.remove(KEY_FILE)
+            os.remove(key_file)
         except Exception:
             pass
     return True
@@ -194,10 +209,14 @@ def unprotect_key(master_password: Optional[str] = None) -> bool:
     pw = master_password or _MASTER_PW_CONTEXT
     if not pw:
         raise ValueError("Master password context not set")
-    if not os.path.exists(ENC_KEY_FILE):
+
+    enc_key_file = _get_enc_key_file()
+    key_file = _get_key_file()
+
+    if not os.path.exists(enc_key_file):
         return True  # Nothing to do
 
-    with open(ENC_KEY_FILE) as f:
+    with open(enc_key_file) as f:
         envelope = json.load(f)
 
     enc_key, mac_key, _ = derive_keys_from_password(pw)
@@ -209,10 +228,10 @@ def unprotect_key(master_password: Optional[str] = None) -> bool:
 
     key_bytes = Fernet(enc_key).decrypt(token)
 
-    tmp = KEY_FILE + ".tmp"
+    tmp = key_file + ".tmp"
     with open(tmp, "wb") as f:
         f.write(key_bytes)
-    os.replace(tmp, KEY_FILE)
+    os.replace(tmp, key_file)
 
     # Optionally keep ENC file as backup
     return True
@@ -223,12 +242,15 @@ def load_key() -> bytes:
 
     If ENC_KEY_FILE exists, requires the master password context to be set.
     """
-    if os.path.exists(ENC_KEY_FILE):
+    enc_key_file = _get_enc_key_file()
+    key_file = _get_key_file()
+
+    if os.path.exists(enc_key_file):
         if not _MASTER_PW_CONTEXT:
             raise ValueError(
                 "Encrypted key present. Set master password context before loading key."
             )
-        with open(ENC_KEY_FILE) as f:
+        with open(enc_key_file) as f:
             envelope = json.load(f)
         token = base64.b64decode(envelope["ciphertext"])
         enc_key, mac_key, _ = derive_keys_from_password(_MASTER_PW_CONTEXT)
@@ -238,10 +260,10 @@ def load_key() -> bytes:
         return Fernet(enc_key).decrypt(token)
 
     # Fallback to plaintext key
-    if not os.path.exists(KEY_FILE):
+    if not os.path.exists(key_file):
         generate_key()
-    with open(KEY_FILE, "rb") as key_file:
-        return key_file.read()
+    with open(key_file, "rb") as key_file_obj:
+        return key_file_obj.read()
 
 
 # Encryption/Decryption for vault (file key) or with a provided master password for exports
@@ -312,6 +334,7 @@ def decrypt_with_password_envelope(blob: bytes, password: str) -> str:
     Verifies HMAC when envelope is present.
     """
     # Try parse as JSON envelope
+    integrity_error = False
     try:
         data = json.loads(blob.decode("utf-8"))
         if isinstance(data, dict) and data.get("format") == "spm-export":
@@ -319,10 +342,15 @@ def decrypt_with_password_envelope(blob: bytes, password: str) -> str:
             enc_key, mac_key, _ = derive_keys_from_password(password)
             mac = hmac.new(mac_key, token, digestmod="sha256").hexdigest()
             if not hmac.compare_digest(mac, data.get("hmac", "")):
+                # Mark as integrity error to re-raise later
+                integrity_error = True
                 raise ValueError("Backup integrity verification failed")
             plaintext = Fernet(enc_key).decrypt(token).decode("utf-8")
             return plaintext
-    except Exception:
+    except Exception as e:
+        # Re-raise if it's an integrity verification failure
+        if integrity_error:
+            raise
         # Not an envelope; fall back to legacy raw token
         pass
 

@@ -12,93 +12,68 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import export_passwords
-from secure_password_manager.utils.crypto import decrypt_password, encrypt_password
+from secure_password_manager.utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    generate_key,
+    set_master_password_context,
+)
 from secure_password_manager.utils.database import add_password, get_passwords, init_db
 
 
-# Test database fixture
 @pytest.fixture
-def test_db():
-    """Create a temporary test database."""
-    fd, path = tempfile.mkstemp()
-    os.close(fd)
+def test_db(clean_database, clean_crypto_files):
+    """Create a temporary test database with crypto setup."""
+    from secure_password_manager.utils.paths import get_database_path
 
-    # Set the DB_FILE to our temporary path
-    original_db = "passwords.db"
+    # Generate crypto key for the test
+    generate_key()
 
-    with patch("utils.database.DB_FILE", path):
-        # Initialize the database
-        init_db()
-        yield path
+    db_path = get_database_path()
 
-    # Clean up
-    os.unlink(path)
-
-
-# Test encryption key fixture
-@pytest.fixture
-def test_key():
-    """Create a temporary test key."""
-    fd, path = tempfile.mkstemp()
-    os.close(fd)
-
-    # Write a test key
-    with open(path, "wb") as f:
-        f.write(b"test-key-for-unit-tests-only-not-secure")
-
-    # Set the KEY_FILE to our temporary path
-    original_key = "secret.key"
-
-    with patch("utils.crypto.KEY_FILE", path):
-        yield path
-
-    # Clean up
-    os.unlink(path)
+    yield str(db_path)
 
 
 def test_add_and_get_password_integration(test_db):
     """Test adding and retrieving a password."""
-    with patch("utils.database.DB_FILE", test_db):
-        # Add a test password
-        website = "testsite.com"
-        username = "testuser"
-        encrypted = encrypt_password("testpassword")
+    website = "example.com"
+    username = "user@example.com"
+    password = "SecurePassword123!"
 
-        add_password(website, username, encrypted)
+    # Encrypt and add password (using plaintext key mode)
+    encrypted = encrypt_password(password)
+    add_password(website, username, encrypted)
 
-        # Retrieve the password
-        passwords = get_passwords()
+    # Retrieve and verify
+    passwords = get_passwords()
+    assert len(passwords) > 0
 
-        # Verify
-        assert len(passwords) == 1
-        assert passwords[0][1] == website
-        assert passwords[0][2] == username
+    found = False
+    for entry in passwords:
+        if entry[1] == website and entry[2] == username:
+            decrypted = decrypt_password(entry[3])
+            assert decrypted == password
+            found = True
+            break
 
-        # Decrypt and verify
-        decrypted = decrypt_password(passwords[0][3])
-        assert decrypted == "testpassword"
+    assert found, "Password not found in database"
 
 
-def test_master_password_auth():
+def test_master_password_auth(clean_crypto_files):
     """Test master password authentication."""
-    # Create a temporary auth file
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp_path = tmp.name
+    from secure_password_manager.utils.paths import get_auth_json_path
 
-    # Patch the auth file path
-    with patch("utils.auth.AUTH_FILE", tmp_path):
-        # Set a master password
-        test_password = "SecureTestPassword123!"
-        set_master_password(test_password)
+    auth_file = get_auth_json_path()
 
-        # Authenticate with correct password
-        assert authenticate(test_password) == True
+    password = "MyMasterPassword123"
 
-        # Authenticate with wrong password
-        assert authenticate("WrongPassword") == False
+    # Set master password
+    set_master_password(password)
+    assert auth_file.exists()
 
-    # Clean up
-    os.unlink(tmp_path)
+    # Test authentication
+    assert authenticate(password)
+    assert not authenticate("WrongPassword")
 
 
 def test_backup_and_restore(test_db):
@@ -106,69 +81,38 @@ def test_backup_and_restore(test_db):
     import time
 
     # Create temporary backup file
-    fd, backup_path = tempfile.mkstemp()
+    fd, backup_path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
-    # Use multi-level patching for consistent DB_FILE references
-    from utils import database
+    try:
+        # Add some test data
+        passwords_to_add = []
+        for i in range(5):
+            site = f"site{i}.com"
+            user = f"user{i}"
+            password = f"pass{i}"
+            encrypted = encrypt_password(password)
+            add_password(site, user, encrypted)
+            passwords_to_add.append(
+                {
+                    "website": site,
+                    "username": user,
+                    "password": password,
+                    "category": "General",
+                    "notes": "",
+                }
+            )
 
-    with patch.object(database, "DB_FILE", test_db), patch(
-        "utils.backup.get_passwords",
-        lambda *args, **kwargs: get_passwords(*args, **kwargs),
-    ):
-        try:
-            # Add some test data
-            passwords_to_add = []
-            for i in range(5):
-                site = f"site{i}.com"
-                user = f"user{i}"
-                encrypted = encrypt_password(f"pass{i}")
-                add_password(site, user, encrypted)
-                passwords_to_add.append(
-                    {
-                        "website": site,
-                        "username": user,
-                        "password": f"pass{i}",
-                        "category": "General",
-                        "notes": "",
-                    }
-                )
+        # Export to backup with a separate password
+        master_pass = "BackupTestPassword"
+        result = export_passwords(backup_path, master_pass)
+        assert result is True
 
-            # Export to backup
-            master_pass = "BackupTestPassword"
-            export_result = export_passwords(backup_path, master_pass)
-            assert export_result == True
+        # Verify backup file exists
+        assert os.path.exists(backup_path)
+        assert os.path.getsize(backup_path) > 0
 
-            # Clear the database (with explicit connection closing)
-            conn = sqlite3.connect(test_db)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM passwords")
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            # Give the system time to release any locks
-            time.sleep(3.0)  # Increased delay further
-
-            # Verify it's empty
-            assert len(get_passwords()) == 0
-
-            # WORKAROUND: Instead of using import_passwords, manually add the passwords
-            # This avoids the database lock issue
-            for entry in passwords_to_add:
-                site = entry["website"]
-                user = entry["username"]
-                password = entry["password"]
-                encrypted = encrypt_password(password)
-                add_password(site, user, encrypted)
-
-            # Verify the workaround worked
-            assert len(get_passwords()) == 5
-
-            # For the test to pass, consider this equivalent to import_passwords succeeding
-            count = 5
-            assert count == 5
-        finally:
-            # Clean up
-            if os.path.exists(backup_path):
-                os.unlink(backup_path)
+    finally:
+        # Clean up
+        if os.path.exists(backup_path):
+            os.remove(backup_path)

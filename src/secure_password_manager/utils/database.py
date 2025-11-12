@@ -6,13 +6,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from secure_password_manager.utils.paths import get_database_path
 
-# Database file path
-DB_FILE = str(get_database_path())
+
+def _get_db_file() -> str:
+    """Get the database file path."""
+    return str(get_database_path())
 
 
 def init_db() -> None:
     """Initialize the database and create tables if not exists."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
 
     # Main passwords table with additional fields
@@ -75,7 +77,7 @@ def add_password(
     current_time = int(time.time())
     expiry_date = current_time + (expiry_days * 86400) if expiry_days else None
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -111,7 +113,7 @@ def get_passwords(
         search_term: Search in website and username
         show_expired: Whether to include expired passwords
     """
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
 
     query = "SELECT * FROM passwords"
@@ -146,7 +148,7 @@ def get_passwords(
 
 def delete_password(entry_id: int) -> None:
     """Delete a password entry by ID."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
     cursor.execute("DELETE FROM passwords WHERE id = ?", (entry_id,))
     conn.commit()
@@ -164,7 +166,7 @@ def update_password(
     favorite: Optional[bool] = None,
 ) -> None:
     """Update a password entry with new information."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
 
     # Get current values
@@ -229,7 +231,7 @@ def update_password(
 
 def get_categories() -> List[Tuple[str, str]]:
     """Get list of all categories with their colors."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
     cursor.execute("SELECT name, color FROM categories")
     categories = cursor.fetchall()
@@ -239,7 +241,7 @@ def get_categories() -> List[Tuple[str, str]]:
 
 def add_category(name: str, color: str = "blue") -> None:
     """Add a new category."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
     cursor.execute("INSERT INTO categories (name, color) VALUES (?, ?)", (name, color))
     conn.commit()
@@ -250,7 +252,7 @@ def get_expiring_passwords(days: int = 30) -> List[Tuple]:
     """Get passwords expiring within specified days."""
     expiry_threshold = int(time.time()) + (days * 86400)
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
     cursor.execute(
         """
