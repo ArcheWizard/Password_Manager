@@ -10,10 +10,10 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.auth import authenticate, set_master_password
-from utils.backup import export_passwords
-from utils.crypto import decrypt_password, encrypt_password
-from utils.database import add_password, get_passwords, init_db
+from secure_password_manager.utils.auth import authenticate, set_master_password
+from secure_password_manager.utils.backup import export_passwords
+from secure_password_manager.utils.crypto import decrypt_password, encrypt_password
+from secure_password_manager.utils.database import add_password, get_passwords, init_db
 
 
 # Test database fixture

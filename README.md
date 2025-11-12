@@ -30,14 +30,24 @@ Current version: see `VERSION.txt` (v1.8.0)
 
 ## 📚 Documentation
 
-Comprehensive project documentation lives in the `docs/` folder:
+Comprehensive project documentation is organized in the `docs/` folder:
 
-- Current status: `docs/current_status.md`
-- Architecture: `docs/architecture.md`
-- Database: `docs/database.md`
-- Security model: `docs/security.md`
-- Development guide: `docs/development.md`
-- Roadmap: `docs/roadmap.md`
+### For Users
+
+- [Documentation Index](docs/README.md) - Complete documentation overview
+
+### For Developers
+
+- [Architecture](docs/development/architecture.md) - System architecture and design
+- [Security Model](docs/development/security.md) - Security implementation details
+- [Database Schema](docs/development/database-schema.md) - Database structure
+- [Contributing Guide](docs/development/contributing.md) - Development guide
+- [Roadmap](docs/releases/roadmap.md) - Future plans
+
+### Build Documentation
+
+- [Build Guide](docs/build/readme.md) - Building from source
+- [Linux Build](docs/build/linux-build-guide.md) - Linux-specific instructions
 
 ## 🛠️ Installation
 
@@ -81,6 +91,14 @@ password-manager-gui
     pip install -e .
     ```
 
+4. If upgrading from an older version, run the migration script:
+
+    ```bash
+    python scripts/migrate_to_new_structure.py
+    ```
+
+    This will move existing data files to the new `.data/` directory.
+
 ## 🛡️ Requirements
 
 - Python 3.8+
@@ -93,59 +111,86 @@ password-manager-gui
 
 ## 📂 Project Structure
 
-The project is organized into modules for maintainability and separation of concerns:
+The project follows PEP 517 src/ layout for better packaging and distribution:
 
 ```plaintext
 password-manager/
-├── apps/                  # Application code
-│   ├── __init__.py        # Package initialization
-│   ├── app.py             # CLI application entry point
-│   └── gui.py             # GUI application entry point
-├── utils/                 # Core utilities
-│   ├── auth.py            # Authentication
-│   ├── backup.py          # Import/export
-│   ├── crypto.py          # Encryption/decryption
-│   ├── database.py        # Database operations
-│   ├── interactive.py     # CLI input utilities
-│   ├── logger.py          # Logging facilities
-│   ├── password_analysis.py # Password evaluation
-│   ├── security_analyzer.py # Breach checking
-│   ├── security_audit.py  # Security auditing
-│   ├── two_factor.py      # 2FA implementation
-│   └── ui.py              # UI formatting
+├── src/                   # Source code (PEP 517 layout)
+│   └── secure_password_manager/
+│       ├── __init__.py    # Package initialization
+│       ├── apps/          # Application entry points
+│       │   ├── app.py     # CLI application
+│       │   └── gui.py     # GUI application
+│       └── utils/         # Core utilities
+│           ├── auth.py            # Authentication
+│           ├── backup.py          # Import/export
+│           ├── crypto.py          # Encryption/decryption
+│           ├── database.py        # Database operations
+│           ├── interactive.py     # CLI input utilities
+│           ├── logger.py          # Logging facilities
+│           ├── password_analysis.py # Password evaluation
+│           ├── paths.py           # Path management (XDG)
+│           ├── security_analyzer.py # Breach checking
+│           ├── security_audit.py  # Security auditing
+│           ├── two_factor.py      # 2FA implementation
+│           └── ui.py              # UI formatting
 ├── tests/                 # Unit & integration tests
-└── README.md              # Project documentation
+├── docs/                  # Documentation
+│   ├── development/       # Technical documentation
+│   ├── build/             # Build instructions
+│   └── releases/          # Release notes
+├── scripts/               # Build and utility scripts
+├── assets/                # Static assets
+│   ├── icons/             # Application icons
+│   └── screenshots/       # UI screenshots
+├── .data/                 # Development data (gitignored)
+└── pyproject.toml         # Project configuration
 ```
+
+### Data Storage
+
+The application uses XDG Base Directory Specification for organized data storage:
+
+**Development Mode** (when running from source):
+
+- All data stored in `.data/` directory in project root
+
+**Production Mode** (when installed via pip):
+
+- Data files: `~/.local/share/secure-password-manager/`
+- Config files: `~/.config/secure-password-manager/`
+- Cache files: `~/.cache/secure-password-manager/`
+- Log files: `~/.local/share/secure-password-manager/logs/`
 
 ## 📸 Screenshots
 
 ### Home Screen
 
-![Home Screen](screenshots/Home.png)
+![Home Screen](assets/screenshots/Home.png)
 
 ### Adding a Password
 
-![Add Password](screenshots/Add_Password.png)
+![Add Password](assets/screenshots/Add_Password.png)
 
 ### Editing a Password
 
-![Edit Password](screenshots/Edit_Password.png)
+![Edit Password](assets/screenshots/Edit_Password.png)
 
 ### Security Audit
 
-![Security Audit](screenshots/Security.png)
+![Security Audit](assets/screenshots/Security.png)
 
 ### Backup Options
 
-![Backup](screenshots/Backup.png)
+![Backup](assets/screenshots/Backup.png)
 
 ### Exporting Passwords
 
-![Export](screenshots/Export.png)
+![Export](assets/screenshots/Export.png)
 
 ### Importing Passwords
 
-![Import](screenshots/Import.png)
+![Import](assets/screenshots/Import.png)
 
 ## 🔒 How It Works
 

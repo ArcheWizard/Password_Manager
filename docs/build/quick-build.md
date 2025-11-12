@@ -13,16 +13,19 @@
 ### Individual Builds
 
 **Standalone Bundle** (Recommended):
+
 ```bash
 ./scripts/build_linux_app.sh
 ```
 
 **AppImage** (Portable):
+
 ```bash
 ./scripts/build_appimage.sh
 ```
 
 **Debian Package**:
+
 ```bash
 ./scripts/build_deb.sh
 ```
@@ -38,6 +41,7 @@
 ## Testing Your Build
 
 ### Test Standalone Bundle
+
 ```bash
 cd dist/password-manager-linux
 ./password-manager-gui        # GUI version
@@ -45,11 +49,13 @@ cd dist/password-manager-linux
 ```
 
 ### Test AppImage
+
 ```bash
 ./PasswordManager-v1.8.1-x86_64.AppImage
 ```
 
 ### Test Debian Package
+
 ```bash
 sudo dpkg -i dist/password-manager_1.8.1_amd64.deb
 password-manager-gui
@@ -58,6 +64,7 @@ password-manager-gui
 ## Installation for Users
 
 ### Standalone Bundle
+
 ```bash
 # Extract
 tar -xzf password-manager-v1.8.1-linux-x86_64.tar.gz
@@ -71,6 +78,7 @@ sudo ./install.sh
 ```
 
 ### AppImage
+
 ```bash
 # Make executable and run
 chmod +x PasswordManager-v1.8.1-x86_64.AppImage
@@ -78,6 +86,7 @@ chmod +x PasswordManager-v1.8.1-x86_64.AppImage
 ```
 
 ### Debian Package
+
 ```bash
 # Install
 sudo dpkg -i password-manager_1.8.1_amd64.deb
@@ -99,24 +108,27 @@ password-manager-gui
 
 ## Common Issues
 
-**Build fails with "pyinstaller not found"**
+### Build fails with "pyinstaller not found"**
+
 ```bash
 pip install pyinstaller
 ```
 
-**GUI won't start**
+### GUI won't start
+
 ```bash
 sudo apt install libxcb-xinerama0
 ```
 
-**Permission denied**
+### Permission denied
+
 ```bash
 chmod +x scripts/build_linux_app.sh
 ```
 
 ## File Structure After Build
 
-```
+```text
 dist/
 ├── password-manager-linux/          # Standalone bundle directory
 │   ├── bin/
@@ -136,7 +148,7 @@ dist/
 
 - Full guide: `docs/build/LINUX_BUILD_GUIDE.md`
 - Project docs: `docs/`
-- GitHub issues: https://github.com/ArcheWizard/password-manager/issues
+- GitHub issues: <https://github.com/ArcheWizard/password-manager/issues>
 
 ## Next Steps
 

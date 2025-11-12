@@ -8,8 +8,10 @@ from typing import Optional, Tuple
 import pyotp
 import qrcode
 
+from secure_password_manager.utils.paths import get_cache_dir, get_totp_config_path
+
 # 2FA configuration file
-TOTP_CONFIG_FILE = "totp_config.json"
+TOTP_CONFIG_FILE = str(get_totp_config_path())
 
 
 def generate_totp_secret() -> str:
@@ -24,8 +26,11 @@ def get_totp_uri(secret: str, account_name: str = "Password Manager") -> str:
     )
 
 
-def generate_qr_code(uri: str, output_path: str = "totp_qr.png") -> str:
+def generate_qr_code(uri: str, output_path: Optional[str] = None) -> str:
     """Generate a QR code image for the TOTP URI."""
+    if output_path is None:
+        output_path = str(get_cache_dir() / "totp_qr.png")
+
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -74,7 +79,7 @@ def verify_totp(code: str) -> bool:
     if not os.path.exists(TOTP_CONFIG_FILE):
         return False
 
-    with open(TOTP_CONFIG_FILE, "r") as f:
+    with open(TOTP_CONFIG_FILE) as f:
         config = json.load(f)
 
     secret = config.get("secret")
@@ -90,7 +95,7 @@ def get_current_totp() -> Optional[str]:
     if not os.path.exists(TOTP_CONFIG_FILE):
         return None
 
-    with open(TOTP_CONFIG_FILE, "r") as f:
+    with open(TOTP_CONFIG_FILE) as f:
         config = json.load(f)
 
     secret = config.get("secret")

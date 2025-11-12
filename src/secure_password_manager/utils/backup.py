@@ -7,10 +7,18 @@ import time
 import zipfile
 from typing import Optional
 
-from utils.crypto import (decrypt_password, decrypt_with_password_envelope,
-                          encrypt_password, encrypt_with_password_envelope)
-from utils.database import add_category, get_categories, get_passwords
-from utils.logger import log_error, log_info
+from secure_password_manager.utils.crypto import (
+    decrypt_password,
+    decrypt_with_password_envelope,
+    encrypt_password,
+    encrypt_with_password_envelope,
+)
+from secure_password_manager.utils.database import (
+    add_category,
+    get_categories,
+    get_passwords,
+)
+from secure_password_manager.utils.logger import log_error, log_info
 
 
 def export_passwords(

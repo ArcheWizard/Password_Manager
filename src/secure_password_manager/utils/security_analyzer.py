@@ -8,8 +8,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+from secure_password_manager.utils.paths import get_breach_cache_path
+
 # Cache of breached password hashes (first 5 characters of SHA-1)
-BREACH_CACHE_FILE = "breach_cache.json"
+BREACH_CACHE_FILE = str(get_breach_cache_path())
 
 
 def hash_password_for_breach_check(password: str) -> Tuple[str, str]:
@@ -75,11 +77,11 @@ def _get_cached_breach_data(prefix: str) -> Optional[List[Tuple[str, int]]]:
         return None
 
     try:
-        with open(BREACH_CACHE_FILE, "r") as f:
+        with open(BREACH_CACHE_FILE) as f:
             cache = json.load(f)
 
         return cache.get(prefix)
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -90,9 +92,9 @@ def _cache_breach_data(prefix: str, hashes: List[Tuple[str, int]]) -> None:
     # Load existing cache if available
     if os.path.exists(BREACH_CACHE_FILE):
         try:
-            with open(BREACH_CACHE_FILE, "r") as f:
+            with open(BREACH_CACHE_FILE) as f:
                 cache = json.load(f)
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             pass
 
     # Update cache
@@ -102,7 +104,7 @@ def _cache_breach_data(prefix: str, hashes: List[Tuple[str, int]]) -> None:
     try:
         with open(BREACH_CACHE_FILE, "w") as f:
             json.dump(cache, f)
-    except IOError:
+    except OSError:
         pass
 
 
@@ -112,10 +114,12 @@ def analyze_password_security(password: str) -> Dict[str, Any]:
 
     Returns a dictionary with analysis results.
     """
-    from utils.password_analysis import (calculate_entropy,
-                                         check_common_patterns,
-                                         evaluate_password_strength,
-                                         get_password_improvement_suggestions)
+    from utils.password_analysis import (
+        calculate_entropy,
+        check_common_patterns,
+        evaluate_password_strength,
+        get_password_improvement_suggestions,
+    )
 
     # Basic strength evaluation
     score, strength = evaluate_password_strength(password)

@@ -8,12 +8,17 @@ from unittest.mock import patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.crypto import (decrypt_with_password_envelope,
-                          derive_keys_from_password,
-                          encrypt_with_password_envelope, generate_key,
-                          is_key_protected, load_kdf_params,
-                          protect_key_with_master_password,
-                          set_master_password_context, unprotect_key)
+from secure_password_manager.utils.crypto import (
+    decrypt_with_password_envelope,
+    derive_keys_from_password,
+    encrypt_with_password_envelope,
+    generate_key,
+    is_key_protected,
+    load_kdf_params,
+    protect_key_with_master_password,
+    set_master_password_context,
+    unprotect_key,
+)
 
 
 def test_kdf_params_versioning():
@@ -30,7 +35,7 @@ def test_kdf_params_versioning():
 
             # Verify JSON format
             assert os.path.exists(salt_file)
-            with open(salt_file, "r") as f:
+            with open(salt_file) as f:
                 data = json.load(f)
             assert data["kdf"] == "PBKDF2HMAC"
             assert data["version"] == 1
@@ -58,7 +63,7 @@ def test_kdf_params_legacy_migration():
 
             # Should have migrated to JSON (non-fatal if write fails, so check if exists)
             try:
-                with open(salt_file, "r") as f:
+                with open(salt_file) as f:
                     data = json.load(f)
                 assert data["version"] == 1
             except Exception:
@@ -151,7 +156,7 @@ def test_protect_and_unprotect_key():
             assert is_key_protected()
 
             # Verify envelope format
-            with open(enc_key_file, "r") as f:
+            with open(enc_key_file) as f:
                 env = json.load(f)
             assert env["format"] == "spm-key"
             assert env["version"] == "1.0"

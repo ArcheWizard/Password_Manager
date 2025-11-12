@@ -3,11 +3,11 @@
 import time
 from typing import Any, Dict, List
 
-from utils.crypto import decrypt_password
-from utils.database import get_passwords
-from utils.logger import log_info
-from utils.password_analysis import evaluate_password_strength
-from utils.security_analyzer import analyze_password_security
+from secure_password_manager.utils.crypto import decrypt_password
+from secure_password_manager.utils.database import get_passwords
+from secure_password_manager.utils.logger import log_info
+from secure_password_manager.utils.password_analysis import evaluate_password_strength
+from secure_password_manager.utils.security_analyzer import analyze_password_security
 
 
 def audit_password_strength() -> Dict[str, List[Dict[str, Any]]]:

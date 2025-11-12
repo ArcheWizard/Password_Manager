@@ -4,11 +4,10 @@ import logging
 import os
 import time
 
-# Setup logging
-LOG_DIR = "logs"
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
+from secure_password_manager.utils.paths import get_log_dir
 
+# Setup logging
+LOG_DIR = str(get_log_dir())
 LOG_FILE = os.path.join(LOG_DIR, "password_manager.log")
 
 # Configure logger
@@ -49,7 +48,7 @@ def get_log_entries(count: int = 50) -> list:
         return entries
 
     try:
-        with open(LOG_FILE, "r") as f:
+        with open(LOG_FILE) as f:
             lines = f.readlines()
 
         # Get the last 'count' lines

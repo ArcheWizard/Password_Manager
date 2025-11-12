@@ -31,21 +31,27 @@ The build system supports three packaging formats:
 ## Documentation Files
 
 ### BUILD_SUMMARY.md
+
 Complete overview including:
+
 - What has been created
 - How to use the build system
 - Distribution guidelines
 - Troubleshooting
 
 ### QUICK_BUILD.md
+
 Quick reference guide with:
+
 - TL;DR build commands
 - Testing instructions
 - Common issues and fixes
 - Distribution checklist
 
 ### LINUX_BUILD_GUIDE.md
+
 Comprehensive guide covering:
+
 - Detailed build process
 - Prerequisites and dependencies
 - Distribution hosting options
@@ -83,6 +89,7 @@ rm -rf build/ dist/ *.AppDir/
 ## Support
 
 For issues or questions:
+
 - Check the troubleshooting sections in the guides
 - Review project documentation in `docs/`
 - Open an issue on GitHub

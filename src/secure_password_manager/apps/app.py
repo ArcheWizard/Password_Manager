@@ -9,24 +9,50 @@ from typing import Optional
 import pyperclip
 from colorama import Fore, Style, init
 
-from utils.auth import authenticate, set_master_password
-from utils.backup import (create_full_backup, export_passwords,
-                          import_passwords, restore_from_backup)
-from utils.crypto import (decrypt_password, encrypt_password,
-                          set_master_password_context)
-from utils.database import (DB_FILE, add_category, add_password,
-                            delete_password, get_categories,
-                            get_expiring_passwords, get_passwords, init_db,
-                            update_password)
-from utils.logger import get_log_entries, log_info
-from utils.password_analysis import (evaluate_password_strength,
-                                     generate_secure_password,
-                                     get_password_improvement_suggestions)
-from utils.security_audit import run_security_audit
-from utils.two_factor import (disable_2fa, is_2fa_enabled, setup_totp,
-                              verify_totp)
-from utils.ui import (print_error, print_header, print_menu_option,
-                      print_success, print_table, print_warning)
+from secure_password_manager.utils.auth import authenticate, set_master_password
+from secure_password_manager.utils.backup import (
+    create_full_backup,
+    export_passwords,
+    import_passwords,
+    restore_from_backup,
+)
+from secure_password_manager.utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    set_master_password_context,
+)
+from secure_password_manager.utils.database import (
+    DB_FILE,
+    add_category,
+    add_password,
+    delete_password,
+    get_categories,
+    get_expiring_passwords,
+    get_passwords,
+    init_db,
+    update_password,
+)
+from secure_password_manager.utils.logger import get_log_entries, log_info
+from secure_password_manager.utils.password_analysis import (
+    evaluate_password_strength,
+    generate_secure_password,
+    get_password_improvement_suggestions,
+)
+from secure_password_manager.utils.security_audit import run_security_audit
+from secure_password_manager.utils.two_factor import (
+    disable_2fa,
+    is_2fa_enabled,
+    setup_totp,
+    verify_totp,
+)
+from secure_password_manager.utils.ui import (
+    print_error,
+    print_header,
+    print_menu_option,
+    print_success,
+    print_table,
+    print_warning,
+)
 
 # Initialize Colorama
 init(autoreset=True)
@@ -988,7 +1014,7 @@ def settings_menu() -> None:
         current_pass = input("Enter current master password: ")
 
         # Verify current password
-        with open("auth.json", "r") as f:
+        with open("auth.json") as f:
             import json
 
             auth_data = json.load(f)
@@ -1050,7 +1076,7 @@ def settings_menu() -> None:
         print(f"Encryption key: {'Present' if key_exists else 'Missing'}")
 
         # Version info
-        with open("VERSION.txt", "r") as f:
+        with open("VERSION.txt") as f:
             version = f.read().strip()
 
         print(f"Password Manager version: {version}")
@@ -1141,8 +1167,12 @@ def login() -> bool:
     """Prompt for master password and authenticate."""
     print_header("Password Manager Login")
 
-    # Check if first run
-    if not os.path.exists("auth.json"):
+    # Check if first run - use proper path
+    from secure_password_manager.utils.paths import get_auth_json_path
+
+    auth_file = str(get_auth_json_path())
+
+    if not os.path.exists(auth_file):
         print_warning("First-time setup. You'll need to create a master password.")
         print("This password will protect all your stored passwords.")
         print("Make sure it's secure and you don't forget it!")
@@ -1169,33 +1199,38 @@ def login() -> bool:
             # Set the master password
             set_master_password(password)
             set_master_password_context(password)
+
             print_success("Master password created successfully")
             log_info("Master password created")
             return True
 
-    else:
+    # Existing user - authenticate
+    for attempt in range(3):
         password = input("Enter master password: ")
-        if not authenticate(password):
-            print_error("Incorrect password")
-            return False
 
-        # Check for 2FA
-        if is_2fa_enabled():
-            print("\nTwo-factor authentication is enabled.")
-            for attempt in range(3):
-                code = input("Enter code from your authenticator app: ")
-                if verify_totp(code):
-                    print_success("Two-factor authentication successful")
-                    break
-                else:
-                    print_error(f"Invalid code. {2 - attempt} attempts remaining.")
-            else:
-                print_error("Too many invalid 2FA attempts.")
+        if authenticate(password):
+            # Set master password context after successful authentication
+            set_master_password_context(password)
+
+            # Try to load the key to verify everything works
+            try:
+                from secure_password_manager.utils.crypto import load_key
+
+                load_key()
+            except ValueError as e:
+                print_error(f"Failed to load encryption key: {e}")
+                print_error("This could mean:")
+                print_error("1. The encryption key file is corrupted")
+                print_error("2. The key protection is misconfigured")
+                print_error("\nPlease restore from backup or start fresh.")
                 return False
 
-        print_success("Authentication successful")
-        set_master_password_context(password)
-        return True
+            return True
+
+        if attempt < 2:
+            print_warning(f"Incorrect password. {2 - attempt} attempts remaining.")
+
+    return False
 
 
 def main() -> int:

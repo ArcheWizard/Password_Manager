@@ -1,8 +1,13 @@
+"""Database utilities for Password Manager."""
+
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-DB_FILE = "passwords.db"
+from secure_password_manager.utils.paths import get_database_path
+
+# Database file path
+DB_FILE = str(get_database_path())
 
 
 def init_db() -> None:

@@ -6,18 +6,25 @@ build-backend = "setuptools.build_meta"
 name = "secure-password-manager"
 dynamic = ["version"]
 authors = [
-    {name = "ArcheWizard", email = "your-email@example.com"},
+    {name = "ArcheWizard", email = "faress22.dadi@gmail.com"},
 ]
-description = "A secure local password manager"
+description = "A secure local password manager with strong encryption"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
+license = {text = "MIT"}
+keywords = ["password", "manager", "security", "encryption", "2fa"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     "Topic :: Security",
     "Topic :: Utilities",
+    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "cryptography>=41.0.0",
@@ -32,12 +39,46 @@ dependencies = [
     "typing-extensions>=4.7.1",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ArcheWizard/Password_Manager"
+Documentation = "https://github.com/ArcheWizard/Password_Manager/tree/main/docs"
+Repository = "https://github.com/ArcheWizard/Password_Manager"
+Issues = "https://github.com/ArcheWizard/Password_Manager/issues"
+Changelog = "https://github.com/ArcheWizard/Password_Manager/blob/main/CHANGELOG.md"
+
 [project.scripts]
-password-manager = "apps.app:main"
-password-manager-gui = "apps.gui:main"
+password-manager = "secure_password_manager.apps.app:main"
+password-manager-gui = "secure_password_manager.apps.gui:main"
 
 [tool.setuptools]
-packages = { find = { where = [".", "apps"] } }
+package-dir = {"" = "src"}
+packages = { find = { where = ["src"] } }
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION.txt"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = []

@@ -48,16 +48,19 @@ chmod +x scripts/build_linux_app.sh
 ```
 
 **Output:**
+
 - `dist/password-manager-linux/` - Application directory
 - `dist/password-manager-vX.X.X-linux-x86_64.tar.gz` - Distributable archive
 
 **Test Locally:**
+
 ```bash
 cd dist/password-manager-linux
 ./password-manager-gui
 ```
 
 **Install System-Wide:**
+
 ```bash
 cd dist/password-manager-linux
 sudo ./install.sh
@@ -65,6 +68,7 @@ sudo ./install.sh
 
 **Distribute:**
 Share the `.tar.gz` file. Users extract and run:
+
 ```bash
 tar -xzf password-manager-vX.X.X-linux-x86_64.tar.gz
 cd password-manager-linux
@@ -81,15 +85,18 @@ chmod +x scripts/build_appimage.sh
 ```
 
 **Output:**
+
 - `PasswordManager-vX.X.X-x86_64.AppImage`
 
 **Run:**
+
 ```bash
 chmod +x PasswordManager-vX.X.X-x86_64.AppImage
 ./PasswordManager-vX.X.X-x86_64.AppImage
 ```
 
 **Advantages:**
+
 - Single file, easy to share
 - No installation required
 - Works on any Linux distribution
@@ -108,20 +115,24 @@ chmod +x scripts/build_deb.sh
 ```
 
 **Output:**
+
 - `dist/password-manager_X.X.X_amd64.deb`
 
 **Install:**
+
 ```bash
 sudo dpkg -i dist/password-manager_X.X.X_amd64.deb
 sudo apt-get install -f  # Fix dependencies if needed
 ```
 
 **Uninstall:**
+
 ```bash
 sudo apt remove password-manager
 ```
 
 **Advantages:**
+
 - Native package management
 - Automatic dependency resolution
 - Clean installation/uninstallation
@@ -153,6 +164,7 @@ sudo apt remove password-manager
 ### Hosting Options
 
 1. **GitHub Releases** (Recommended)
+
    ```bash
    # Tag your release
    git tag v1.8.1
@@ -184,6 +196,7 @@ sha256sum password-manager_*.deb >> SHA256SUMS
 ```
 
 Users verify with:
+
 ```bash
 sha256sum -c SHA256SUMS
 ```
@@ -236,16 +249,19 @@ password-manager-gui
 ### Build Errors
 
 **Error: `pyinstaller: command not found`**
+
 ```bash
 pip install pyinstaller
 ```
 
 **Error: `No module named 'PyQt5'`**
+
 ```bash
 pip install -r requirements.txt
 ```
 
 **Error: Permission denied**
+
 ```bash
 chmod +x scripts/build_linux_app.sh
 ```
@@ -253,17 +269,20 @@ chmod +x scripts/build_linux_app.sh
 ### Runtime Errors
 
 **Error: `cannot execute binary file`**
+
 ```bash
 chmod +x password-manager-gui
 ```
 
 **Error: GUI doesn't start**
+
 ```bash
 # Install missing X11 libraries
 sudo apt install libxcb-xinerama0 libxcb-cursor0
 ```
 
 **Error: `libffi.so.7: cannot open shared object file`**
+
 ```bash
 # Install missing library
 sudo apt install libffi7
@@ -348,6 +367,7 @@ gpg --detach-sign --armor PasswordManager-*.AppImage
 ### Installed Files
 
 **System-wide installation:**
+
 - Binaries: `/opt/password-manager/`
 - Symlinks: `/usr/local/bin/`
 - Desktop entry: `/usr/share/applications/`
@@ -355,6 +375,7 @@ gpg --detach-sign --armor PasswordManager-*.AppImage
 - Docs: `/usr/share/doc/password-manager/`
 
 **User data:**
+
 - Database: `~/passwords.db` (or current directory)
 - Config: `~/.config/password-manager/`
 - Logs: `~/logs/` (or current directory)
@@ -370,13 +391,14 @@ gpg --detach-sign --armor PasswordManager-*.AppImage
 
 ### Getting Help
 
-- GitHub Issues: https://github.com/ArcheWizard/password-manager/issues
+- GitHub Issues: <https://github.com/ArcheWizard/password-manager/issues>
 - Documentation: `docs/` directory
 - README: `README.md`
 
 ### Reporting Build Issues
 
 Include this information:
+
 - Your Linux distribution and version: `lsb_release -a`
 - Python version: `python3 --version`
 - Error messages
@@ -398,5 +420,3 @@ Include this information:
 - [Desktop Entry Specification](https://specifications.freedesktop.org/desktop-entry-spec/)
 
 ---
-
-**Happy Building! 🚀**

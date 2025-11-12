@@ -1,3 +1,5 @@
+"""Cryptographic utilities for Password Manager."""
+
 import base64
 import hmac
 import json
@@ -9,10 +11,16 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# Key and KDF configuration
-KEY_FILE = "secret.key"
-ENC_KEY_FILE = "secret.key.enc"  # Optional protected key (wrapped by master password)
-SALT_FILE = "crypto.salt"
+from secure_password_manager.utils.paths import (
+    get_crypto_salt_path,
+    get_secret_key_enc_path,
+    get_secret_key_path,
+)
+
+# File paths
+KEY_FILE = str(get_secret_key_path())
+ENC_KEY_FILE = str(get_secret_key_enc_path())
+SALT_FILE = str(get_crypto_salt_path())
 
 CURRENT_KDF_VERSION = 1
 DEFAULT_ITERATIONS = 100_000
@@ -49,7 +57,7 @@ def load_kdf_params() -> Tuple[bytes, int, int]:
 
     # Try JSON format first
     try:
-        with open(SALT_FILE, "r") as f:
+        with open(SALT_FILE) as f:
             data = json.load(f)
         salt_b = base64.b64decode(data["salt"])
         iterations = int(data.get("iterations", DEFAULT_ITERATIONS))
@@ -189,7 +197,7 @@ def unprotect_key(master_password: Optional[str] = None) -> bool:
     if not os.path.exists(ENC_KEY_FILE):
         return True  # Nothing to do
 
-    with open(ENC_KEY_FILE, "r") as f:
+    with open(ENC_KEY_FILE) as f:
         envelope = json.load(f)
 
     enc_key, mac_key, _ = derive_keys_from_password(pw)
@@ -220,7 +228,7 @@ def load_key() -> bytes:
             raise ValueError(
                 "Encrypted key present. Set master password context before loading key."
             )
-        with open(ENC_KEY_FILE, "r") as f:
+        with open(ENC_KEY_FILE) as f:
             envelope = json.load(f)
         token = base64.b64decode(envelope["ciphertext"])
         enc_key, mac_key, _ = derive_keys_from_password(_MASTER_PW_CONTEXT)

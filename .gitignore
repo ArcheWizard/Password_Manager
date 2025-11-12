@@ -1,8 +1,21 @@
 venv/
 __pycache__/
+
+# User data (for production use)
 *.db
 secret*
 crypto.salt
+auth.json
+breach_cache.json
+totp_config.json
+totp_qr.png
+backup.dat
+backups/
+temp_restore/
+
+# Local development data directory
+.data/
+!.data/.gitkeep
 
 # Additional Python-related files
 *.py[cod]
@@ -18,6 +31,10 @@ pip-delete-this-directory.txt
 dist/
 /build/
 *.egg-info/
+*.egg
+
+# Temporary directories (auto-created by app)
+temp_restore/
 
 # Linux build artifacts
 *.AppDir/
@@ -27,7 +44,9 @@ password-manager_*_amd64/
 password-manager-*.spec
 *.tar.gz
 *.deb
-temp_restore/
+
+# Optional: Keep archived releases
+releases/
 
 # Unit test / coverage reports
 htmlcov/

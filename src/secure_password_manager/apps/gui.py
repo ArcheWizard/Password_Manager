@@ -9,26 +9,61 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtCore import Qt as QtCoreQt
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import (QAction, QApplication, QCheckBox, QComboBox,
-                             QDialog, QDialogButtonBox, QFileDialog,
-                             QFormLayout, QGroupBox, QHBoxLayout, QHeaderView,
-                             QInputDialog, QLabel, QLineEdit, QMainWindow,
-                             QMessageBox, QPushButton, QTableWidget,
-                             QTableWidgetItem, QTabWidget, QToolBar,
-                             QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
 
-from utils.auth import authenticate, set_master_password
-from utils.backup import export_passwords, import_passwords
-from utils.crypto import (decrypt_password, encrypt_password, is_key_protected,
-                          protect_key_with_master_password,
-                          set_master_password_context)
-from utils.database import (add_category, add_password, delete_password,
-                            get_categories, get_passwords, init_db,
-                            update_password)
-from utils.logger import get_log_entries
-from utils.password_analysis import (evaluate_password_strength,
-                                     generate_secure_password)
-from utils.two_factor import disable_2fa, is_2fa_enabled, setup_totp
+from secure_password_manager.utils.auth import authenticate, set_master_password
+from secure_password_manager.utils.backup import export_passwords, import_passwords
+from secure_password_manager.utils.crypto import (
+    decrypt_password,
+    encrypt_password,
+    is_key_protected,
+    protect_key_with_master_password,
+    set_master_password_context,
+)
+from secure_password_manager.utils.database import (
+    add_category,
+    add_password,
+    delete_password,
+    get_categories,
+    get_passwords,
+    init_db,
+    update_password,
+)
+from secure_password_manager.utils.logger import get_log_entries
+from secure_password_manager.utils.password_analysis import (
+    evaluate_password_strength,
+    generate_secure_password,
+)
+from secure_password_manager.utils.paths import get_auth_json_path
+from secure_password_manager.utils.two_factor import (
+    disable_2fa,
+    is_2fa_enabled,
+    setup_totp,
+)
 
 
 class PasswordManagerApp(QMainWindow):
@@ -45,20 +80,54 @@ class PasswordManagerApp(QMainWindow):
         if password is None:
             sys.exit(0)
 
-        # Only set master password context if key is actually protected
-        from utils.crypto import is_key_protected, set_master_password_context
-
-        if is_key_protected():
-            set_master_password_context(password)
+        # Import crypto functions
+        from secure_password_manager.utils.crypto import (
+            is_key_protected,
+            load_key,
+            set_master_password_context,
+        )
 
         # Store password for later use (e.g., change password, protect key)
         self._master_password = password
+
+        # Set master password context and verify key access
+        if is_key_protected():
+            # Key is protected, set context and verify we can decrypt it
+            try:
+                set_master_password_context(password)
+                load_key()  # Verify we can load the protected key
+            except ValueError as e:
+                QMessageBox.critical(
+                    self,
+                    "Key Decryption Failed",
+                    f"Failed to decrypt the encryption key with the provided master password.\n\n"
+                    f"Error: {str(e)}\n\n"
+                    "This could mean:\n"
+                    "1. The master password is incorrect\n"
+                    "2. The encryption key file is corrupted\n"
+                    "3. The key was protected with a different password\n\n"
+                    "The application will now exit.",
+                )
+                sys.exit(1)
+        else:
+            # Key is not protected, but we should still set context for potential protection later
+            set_master_password_context(password)
 
         # Create UI
         self.init_ui()
 
     def get_master_password(self):
         """Prompt for master password and return it if authentication succeeds, else None."""
+        import os
+
+        # Check if this is first-time setup
+        auth_file = str(get_auth_json_path())
+
+        if not os.path.exists(auth_file):
+            # First-time setup
+            return self.first_time_setup()
+
+        # Existing user - authenticate
         for attempt in range(3):
             password, ok = QInputDialog.getText(
                 self, "Login", "Enter master password:", QLineEdit.Password
@@ -78,6 +147,103 @@ class PasswordManagerApp(QMainWindow):
 
         QMessageBox.critical(self, "Login Failed", "Too many failed attempts.")
         return None
+
+    def first_time_setup(self):
+        """Handle first-time setup by creating a master password."""
+        # Show welcome message
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("Welcome to Secure Password Manager")
+        msg.setText("First-time Setup")
+        msg.setInformativeText(
+            "Welcome! It looks like this is your first time using the Password Manager.\n\n"
+            "You'll need to create a master password that will protect all your stored passwords.\n\n"
+            "⚠️ Important:\n"
+            "• Make sure it's secure and memorable\n"
+            "• You'll need it every time you open this app\n"
+            "• If you forget it, your passwords cannot be recovered!"
+        )
+        msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+        if msg.exec_() != QMessageBox.Ok:
+            return None
+
+        # Create master password dialog
+        while True:
+            password, ok = QInputDialog.getText(
+                self,
+                "Create Master Password",
+                "Create your master password (at least 8 characters):",
+                QLineEdit.Password,
+            )
+
+            if not ok:  # User cancelled
+                return None
+
+            # Validate password length
+            if len(password) < 8:
+                QMessageBox.warning(
+                    self,
+                    "Password Too Short",
+                    "Your master password must be at least 8 characters long.\n\nPlease try again.",
+                )
+                continue
+
+            # Confirm password
+            confirm, ok = QInputDialog.getText(
+                self,
+                "Confirm Master Password",
+                "Confirm your master password:",
+                QLineEdit.Password,
+            )
+
+            if not ok:  # User cancelled
+                return None
+
+            # Check if passwords match
+            if password != confirm:
+                QMessageBox.warning(
+                    self,
+                    "Passwords Don't Match",
+                    "The passwords you entered don't match.\n\nPlease try again.",
+                )
+                continue
+
+            # Check password strength
+            score, feedback = evaluate_password_strength(password)
+
+            if score < 3:
+                # Warn about weak password
+                reply = QMessageBox.question(
+                    self,
+                    "Weak Password Warning",
+                    f"Your master password is weak (strength: {score}/4).\n\n"
+                    f"Suggestions:\n{feedback}\n\n"
+                    "Do you want to use this password anyway?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+
+                if reply != QMessageBox.Yes:
+                    continue
+
+            # Create the master password
+            try:
+                set_master_password(password)
+                QMessageBox.information(
+                    self,
+                    "Setup Complete",
+                    "✓ Master password created successfully!\n\n"
+                    "You can now start managing your passwords.",
+                )
+                return password
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Setup Failed",
+                    f"Failed to create master password: {str(e)}\n\nPlease try again.",
+                )
+                continue
 
     def init_ui(self):
         # Set up central widget with tabs
@@ -1054,7 +1220,7 @@ class PasswordManagerApp(QMainWindow):
 
         try:
             # Import from backup.py
-            from utils.backup import create_full_backup
+            from secure_password_manager.utils.backup import create_full_backup
 
             # Create backup
             backup_path = create_full_backup(backup_dir, password)
@@ -1109,7 +1275,7 @@ class PasswordManagerApp(QMainWindow):
 
         try:
             # Import from backup.py
-            from utils.backup import restore_from_backup
+            from secure_password_manager.utils.backup import restore_from_backup
 
             # Restore from backup
             success = restore_from_backup(filename, password)
@@ -1139,7 +1305,7 @@ class PasswordManagerApp(QMainWindow):
 
         try:
             # Run the audit
-            from utils.security_audit import run_security_audit
+            from secure_password_manager.utils.security_audit import run_security_audit
 
             audit_results = run_security_audit()
 
@@ -1569,7 +1735,7 @@ class PasswordManagerApp(QMainWindow):
         """Dialog to change the master password"""
         import json
 
-        from utils.auth import verify_password
+        from secure_password_manager.utils.auth import verify_password
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Change Master Password")
@@ -1612,7 +1778,7 @@ class PasswordManagerApp(QMainWindow):
 
             # Validate current password
             try:
-                with open("auth.json", "r") as f:
+                with open("auth.json") as f:
                     auth_data = json.load(f)
                     auth_hash = auth_data["master_hash"]
 
@@ -1670,7 +1836,9 @@ class PasswordManagerApp(QMainWindow):
                     )
                     if reply == QMessageBox.Yes:
                         try:
-                            from utils.crypto import unprotect_key
+                            from secure_password_manager.utils.crypto import (
+                                unprotect_key,
+                            )
 
                             unprotect_key(current_pass)
                             protect_key_with_master_password(new_pass)
@@ -1796,7 +1964,7 @@ class PasswordManagerApp(QMainWindow):
                 )
 
                 if reply == QMessageBox.Yes:
-                    from utils.crypto import unprotect_key
+                    from secure_password_manager.utils.crypto import unprotect_key
 
                     unprotect_key(self._master_password)
                     # Clear the context since we're back to plaintext

@@ -123,6 +123,7 @@ sha256sum password-manager_*.deb >> SHA256SUMS
 ### Step 3: Create GitHub Release
 
 1. Tag your release:
+
    ```bash
    git tag v1.8.1
    git push origin v1.8.1
@@ -201,6 +202,7 @@ password-manager-gui
 ## 🔍 Key Features of the Build System
 
 ### Standalone Bundle
+
 - ✅ Works on any Linux distribution
 - ✅ Includes both CLI and GUI
 - ✅ Easy installation script
@@ -209,6 +211,7 @@ password-manager-gui
 - ✅ Comprehensive documentation
 
 ### AppImage
+
 - ✅ Single portable file
 - ✅ No installation required
 - ✅ Sandboxed execution
@@ -217,6 +220,7 @@ password-manager-gui
 - ✅ Optional desktop integration
 
 ### Debian Package
+
 - ✅ Native package management
 - ✅ Automatic dependency resolution
 - ✅ Clean installation/removal
@@ -227,6 +231,7 @@ password-manager-gui
 ## 🛠️ Build Requirements
 
 ### System Requirements
+
 - Linux (Ubuntu 20.04+ or Debian 11+ recommended)
 - Python 3.8 or higher
 - 500MB free disk space
@@ -265,6 +270,7 @@ Password_Manager/
 ## 🎯 Next Steps
 
 1. **Build your first package:**
+
    ```bash
    ./build_menu.sh
    ```
@@ -301,11 +307,13 @@ Password_Manager/
 ### Build Issues
 
 **Error: "pyinstaller: command not found"**
+
 ```bash
 pip install pyinstaller
 ```
 
 **Error: "No module named 'PyQt5'"**
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -313,11 +321,13 @@ pip install -r requirements.txt
 ### Runtime Issues
 
 **GUI won't start**
+
 ```bash
 sudo apt install libxcb-xinerama0 libxcb-cursor0
 ```
 
 **Permission denied**
+
 ```bash
 chmod +x build_linux_app.sh
 # or
@@ -329,9 +339,9 @@ chmod +x PasswordManager-*.AppImage
 - **Full Build Guide**: `LINUX_BUILD_GUIDE.md`
 - **Quick Reference**: `QUICK_BUILD.md`
 - **Project Documentation**: `docs/` directory
-- **PyInstaller Docs**: https://pyinstaller.readthedocs.io/
-- **AppImage Docs**: https://docs.appimage.org/
-- **Debian Packaging**: https://www.debian.org/doc/manuals/maint-guide/
+- **PyInstaller Docs**: <https://pyinstaller.readthedocs.io/>
+- **AppImage Docs**: <https://docs.appimage.org/>
+- **Debian Packaging**: <https://www.debian.org/doc/manuals/maint-guide/>
 
 ## ✨ Benefits of This Setup
 
@@ -343,11 +353,11 @@ chmod +x PasswordManager-*.AppImage
 6. **Documentation**: Comprehensive guides for builders and users
 7. **Cross-Distribution**: Works on Ubuntu, Debian, Fedora, Arch, etc.
 
-## 🎉 Success!
+## 🎉 Success
 
 You now have a complete Linux application packaging system for your Password Manager!
 
-### Quick Recap:
+### Quick Recap
 
 ✅ Three build methods (Standalone, AppImage, .deb)
 ✅ Interactive build menu for easy selection
@@ -357,6 +367,7 @@ You now have a complete Linux application packaging system for your Password Man
 ✅ Ready to distribute to users
 
 **Start building:**
+
 ```bash
 ./build.sh
 ```
