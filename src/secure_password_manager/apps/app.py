@@ -22,7 +22,6 @@ from secure_password_manager.utils.crypto import (
     set_master_password_context,
 )
 from secure_password_manager.utils.database import (
-    DB_FILE,
     add_category,
     add_password,
     delete_password,
@@ -53,6 +52,7 @@ from secure_password_manager.utils.ui import (
     print_table,
     print_warning,
 )
+from secure_password_manager.utils.paths import get_database_path
 
 # Initialize Colorama
 init(autoreset=True)
@@ -1049,7 +1049,7 @@ def settings_menu() -> None:
         print_header("System Information")
 
         # Database info
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(str(get_database_path()))
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM passwords")
         password_count = cursor.fetchone()[0]
