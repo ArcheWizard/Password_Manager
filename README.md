@@ -166,43 +166,43 @@ The application uses XDG Base Directory Specification for organized data storage
 
 ### First Time Setup
 
-![First Time Setup](assets/screenshots/First_Time_Setup.png)
-![Setting Master Password](assets/screenshots/First_Time_Password.png)
-![Weak Password Warning](assets/screenshots/First_Time_Weak_Password_Warning.png)
-![Password Confirmation](assets/screenshots/First_Time_Password_Confirm.png)
-![Setup Complete](assets/screenshots/First_Time_Setup_Complete.png)
+![First Time Setup](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/First_Time_Setup.png)
+![Setting Master Password](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/First_Time_Password.png)
+![Weak Password Warning](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/First_Time_Weak_Password_Warning.png)
+![Password Confirmation](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/First_Time_Password_Confirm.png)
+![Setup Complete](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/First_Time_Setup_Complete.png)
 
 ### Login
 
-![Login Screen](assets/screenshots/Login.png)
+![Login Screen](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Login.png)
 
 ### Home Screen
 
-![Home Screen](assets/screenshots/Home.png)
+![Home Screen](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Home.png)
 
 ### Password Management
 
-![Adding a Password](assets/screenshots/Add_Password.png)
-![Editing a Password](assets/screenshots/Edit_Password.png)
+![Adding a Password](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Add_Password.png)
+![Editing a Password](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Edit_Password.png)
 
 ### Categories
 
-![Categories](assets/screenshots/Categories.png)
+![Categories](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Categories.png)
 
 ### Security Audit
 
-![Security Audit](assets/screenshots/Security.png)
+![Security Audit](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Security.png)
 
 ### Backup & Restore
 
-![Backup Options](assets/screenshots/Backup.png)
-![Exporting Passwords](assets/screenshots/Export.png)
-![Importing Passwords](assets/screenshots/Import.png)
+![Backup Options](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Backup.png)
+![Exporting Passwords](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Export.png)
+![Importing Passwords](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Import.png)
 
 ### Settings & Logs
 
-![Settings](assets/screenshots/Settings.png)
-![Activity Logs](assets/screenshots/Logs.png)
+![Settings](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Settings.png)
+![Activity Logs](https://raw.githubusercontent.com/ArcheWizard/password-manager/main/assets/screenshots/Logs.png)
 
 ## 🔒 How It Works
 
