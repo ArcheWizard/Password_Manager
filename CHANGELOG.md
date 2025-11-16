@@ -7,16 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned
+## [1.8.2] - 2025-11-16
 
-- Derive vault key from master password and/or protect `secret.key` using OS keyring
-- KDF migration path (Argon2id/scrypt) with parameter versioning
-- Improved import/restore with integrity validation and fewer SQLite lock issues
-- Clipboard auto-clear and additional UX hardening
-- CI/CD pipeline and code quality tooling (pylint, mypy, black)
-- Password history tracking
-- Cross-platform desktop application (PyInstaller/PyOxidizer)
-- Docker container support
+### Changed
+
+- Updated screenshot documentation with absolute GitHub URLs for PyPI compatibility
+- Improved README.md image display on PyPI package page
+
+### Fixed
+
+- Screenshot references now use raw.githubusercontent.com URLs
+- Fixed image display issues on PyPI project page
 
 ## [1.8.1] - 2025-11-11
 

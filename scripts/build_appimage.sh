@@ -38,7 +38,8 @@ source venv/bin/activate
 # Install dependencies
 echo "Installing build dependencies..."
 pip install --upgrade pip pyinstaller
-pip install -r requirements.txt
+# Install the project itself with all dependencies
+pip install -e .
 
 # Download appimagetool if not present
 APPIMAGE_TOOL="appimagetool-x86_64.AppImage"

@@ -40,7 +40,8 @@ source venv/bin/activate
 echo "Installing build dependencies..."
 pip install --upgrade pip
 pip install pyinstaller
-pip install -r requirements.txt
+# Install the project itself with all dependencies
+pip install -e .
 
 # Clean previous builds
 echo "Cleaning previous builds..."
