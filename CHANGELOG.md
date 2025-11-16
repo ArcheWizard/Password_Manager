@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2025-11-16
+
+### Added
+
+- Application screenshots now properly committed to repository
+- Complete visual documentation of all major features
+
+### Changed
+
+- Fixed screenshot repository URLs to match correct GitHub repository name
+- Screenshots now display correctly on both GitHub and PyPI
+
+### Fixed
+
+- Screenshot files now accessible via raw.githubusercontent.com
+- Corrected repository name from `password-manager` to `Password_Manager` in all URLs
+
 ## [1.8.2] - 2025-11-16
 
 ### Changed

@@ -1,6 +1,6 @@
 """Secure Password Manager - A local-first password management solution."""
 
-__version__ = "1.8.2"
+__version__ = "1.8.3"
 __author__ = "ArcheWizard"
 __license__ = "MIT"
 
