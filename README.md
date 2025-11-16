@@ -164,33 +164,45 @@ The application uses XDG Base Directory Specification for organized data storage
 
 ## 📸 Screenshots
 
+### First Time Setup
+
+![First Time Setup](assets/screenshots/First_Time_Setup.png)
+![Setting Master Password](assets/screenshots/First_Time_Password.png)
+![Weak Password Warning](assets/screenshots/First_Time_Weak_Password_Warning.png)
+![Password Confirmation](assets/screenshots/First_Time_Password_Confirm.png)
+![Setup Complete](assets/screenshots/First_Time_Setup_Complete.png)
+
+### Login
+
+![Login Screen](assets/screenshots/Login.png)
+
 ### Home Screen
 
 ![Home Screen](assets/screenshots/Home.png)
 
-### Adding a Password
+### Password Management
 
-![Add Password](assets/screenshots/Add_Password.png)
+![Adding a Password](assets/screenshots/Add_Password.png)
+![Editing a Password](assets/screenshots/Edit_Password.png)
 
-### Editing a Password
+### Categories
 
-![Edit Password](assets/screenshots/Edit_Password.png)
+![Categories](assets/screenshots/Categories.png)
 
 ### Security Audit
 
 ![Security Audit](assets/screenshots/Security.png)
 
-### Backup Options
+### Backup & Restore
 
-![Backup](assets/screenshots/Backup.png)
+![Backup Options](assets/screenshots/Backup.png)
+![Exporting Passwords](assets/screenshots/Export.png)
+![Importing Passwords](assets/screenshots/Import.png)
 
-### Exporting Passwords
+### Settings & Logs
 
-![Export](assets/screenshots/Export.png)
-
-### Importing Passwords
-
-![Import](assets/screenshots/Import.png)
+![Settings](assets/screenshots/Settings.png)
+![Activity Logs](assets/screenshots/Logs.png)
 
 ## 🔒 How It Works
 
