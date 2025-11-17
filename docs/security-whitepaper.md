@@ -1,0 +1,89 @@
+# Security Whitepaper
+
+This document describes the security goals, threat model, cryptographic design, operational safeguards, and planned evolutions of Secure Password Manager.
+
+## Goals
+
+1. Protect credentials at rest using strong, audited primitives.
+2. Minimize the blast radius of host compromise through layered defenses.
+3. Preserve privacy when interacting with external services (e.g., breach APIs).
+4. Provide clear guidance for secure operation, backups, and incident response.
+
+## Non-Goals
+
+- Cloud storage or multi-tenant hosting (all storage remains local).
+- Automatic trust of remote browser extensions without explicit pairing.
+- Telemetry beyond anonymized optional metrics (not yet implemented).
+
+## Threat Model
+
+| Threat | Mitigation |
+| --- | --- |
+| Offline attacker with database file but no key | Strong KDF + envelope encryption; optional KEK derived from master password only. |
+| Compromised local account while vault unlocked | Auto-lock timers, clipboard clearing, minimal plaintext exposure. |
+| Malicious breach-check service | k-anonymity queries (first 5 SHA-1 chars), offline dictionary support, request throttling. |
+| Rogue browser extension | Token-based IPC, per-origin allowlists, user prompts, rate limiting. |
+| Tampered backups | HMAC-SHA256 integrity envelopes, manifest hashes, restore-time verification. |
+
+## Cryptography
+
+- **Key Derivation**: PBKDF2-HMAC-SHA256 (configurable iterations). Roadmap includes Argon2id and scrypt.
+- **Master Key Storage**: `secret.key` encrypted by a Key Encryption Key (KEK) derived from the master password. Optional mode derives the data key directly each session, removing `secret.key` entirely.
+- **Data Encryption**: Fernet tokens (AES-128-CBC + HMAC-SHA256) per password entry.
+- **Integrity**: Export files contain versioned metadata plus HMAC over ciphertext.
+- **Randomness**: `secrets` module with OS entropy; password generator supports per-character-class entropy tuning.
+
+## Authentication & Access Control
+
+1. **Master Password**: Mandatory on every launch.
+2. **Two-Factor Authentication**: RFC 6238-compliant TOTP with QR provisioning. Verification occurs before decrypting vault contents.
+3. **Session Lock**: Optional idle timer requiring re-authentication.
+4. **Role Separation** (planned): Profiles for personal vs. team vaults, each with distinct KDF settings and audit policies.
+
+## Clipboard & UI Protections
+
+- Passwords copied via CLI/GUI trigger timers that wipe the clipboard using OS-specific commands.
+- GUI uses masked fields by default; unmasking requires holding a modifier key.
+- Keyboard shortcuts avoid logging sensitive data.
+
+## Network Interactions
+
+- Breach checks call Have I Been Pwned range API using first five SHA-1 characters of the password hash, preserving anonymity.
+- Future sync or browser services use a localhost RPC server bound to 127.0.0.1 with mutual authentication tokens.
+- Proxy settings and offline breach dictionaries are supported to minimize direct outbound calls.
+
+## Logging & Telemetry
+
+- Application logs default to `logs/password_manager.log` with timestamps, log level, module, and redactable entry IDs.
+- No plaintext passwords, master keys, or TOTP secrets are ever logged.
+- Auditable events include login success/failure, backup operations, imports/exports, and audit summaries.
+
+## Backup & Recovery Security
+
+1. **Full Backups**: Zip archives containing database, key files, salts, auth config, breach cache, and manifest. Archives can be optionally encrypted with a passphrase before offsite storage.
+2. **Encrypted Exports**: JSON payload encrypted with a user-supplied passphrase; includes metadata version and HMAC for tamper detection.
+3. **Restore Process**: Creates timestamped `.bak` copies before overwriting production files. Integrity hashes validated prior to import.
+
+## Incident Response Guidance
+
+1. **Suspected Compromise**
+   - Disconnect from network, copy logs, capture system state.
+   - Rotate master password and regenerate KEK/secret key.
+   - Run full security audit; mark affected entries for rotation.
+2. **Lost Device**
+   - Ensure backups are encrypted and stored offsite.
+   - Restore backup on a clean machine, rotate master password, enable 2FA.
+3. **Breach Findings**
+   - Use audit export JSON as evidence.
+   - Coordinate with service owners to rotate credentials and add monitoring.
+
+## Future Enhancements
+
+- Hardware-backed keys (TPM, Secure Enclave, FIDO2) for unlocking vaults.
+- End-to-end encrypted sync with selective sharing groups.
+- Signed plugin ecosystem with permission manifest.
+- Automatic policy enforcement (minimum length, rotation interval, forbidden domains).
+
+## Responsible Disclosure
+
+Security researchers can report vulnerabilities via the contact listed in `README.md`. Provide reproduction steps, affected components, and any proof-of-concept code. We commit to timely acknowledgment and coordinated disclosure.
