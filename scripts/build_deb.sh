@@ -66,16 +66,18 @@ pip install -e .
 # Build executables
 echo "Building executables..."
 pyinstaller --clean --onefile --name password-manager \
+    --paths src \
     --add-data "VERSION.txt:." \
     --hidden-import=cryptography \
-    apps/app.py
+    src/secure_password_manager/apps/app.py
 
 pyinstaller --clean --onefile --name password-manager-gui \
+    --paths src \
     --add-data "VERSION.txt:." \
     --hidden-import=cryptography \
     --hidden-import=PyQt5 \
     --hidden-import=zxcvbn \
-    apps/gui.py
+    src/secure_password_manager/apps/gui.py
 
 # Copy executables
 echo "Copying executables..."
@@ -98,7 +100,7 @@ echo "Creating symlinks..."
 cd "$DEB_DIR/usr/local/bin"
 ln -s /opt/password-manager/bin/password-manager password-manager
 ln -s /opt/password-manager/bin/password-manager-gui password-manager-gui
-cd "$SCRIPT_DIR"
+cd "$PROJECT_ROOT"
 
 # Create desktop entry
 echo "Creating desktop entry..."

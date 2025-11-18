@@ -11,6 +11,8 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from secure_password_manager.utils import config
+from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.paths import (
     get_crypto_salt_path,
     get_secret_key_enc_path,
@@ -44,19 +46,26 @@ def _get_salt_file() -> str:
     return str(get_crypto_salt_path())
 
 
-def generate_salt() -> bytes:
-    """Generate and save a salt for key derivation (with versioned metadata)."""
-    salt = os.urandom(16)
+def save_kdf_params(
+    salt: bytes,
+    iterations: int,
+    version: int = CURRENT_KDF_VERSION,
+) -> None:
     data = {
         "kdf": "PBKDF2HMAC",
-        "version": CURRENT_KDF_VERSION,
-        "iterations": DEFAULT_ITERATIONS,
+        "version": version,
+        "iterations": iterations,
         "salt": base64.b64encode(salt).decode("ascii"),
         "updated_at": _now_ts(),
     }
-    # Store JSON for forward compatibility
     with open(_get_salt_file(), "w") as salt_file:
         json.dump(data, salt_file)
+
+
+def generate_salt(length: int = 16, iterations: int = DEFAULT_ITERATIONS) -> bytes:
+    """Generate a new salt of ``length`` bytes and persist it with metadata."""
+    salt = os.urandom(length)
+    save_kdf_params(salt, iterations)
     return salt
 
 
@@ -80,28 +89,26 @@ def load_kdf_params() -> Tuple[bytes, int, int]:
         with open(salt_file, "rb") as f:
             salt_b = f.read()
         # Migrate to JSON without changing the salt value
-        data = {
-            "kdf": "PBKDF2HMAC",
-            "version": CURRENT_KDF_VERSION,
-            "iterations": DEFAULT_ITERATIONS,
-            "salt": base64.b64encode(salt_b).decode("ascii"),
-            "updated_at": _now_ts(),
-        }
         try:
-            with open(salt_file, "w") as wf:
-                json.dump(data, wf)
+            save_kdf_params(salt_b, DEFAULT_ITERATIONS, CURRENT_KDF_VERSION)
         except Exception:
             # Non-fatal; continue with legacy params
             pass
         return salt_b, DEFAULT_ITERATIONS, CURRENT_KDF_VERSION
 
 
-def derive_key_from_password(password: str) -> bytes:
+def derive_key_from_password(
+    password: str,
+    *,
+    salt: Optional[bytes] = None,
+    iterations: Optional[int] = None,
+) -> bytes:
     """Derive a Fernet key (urlsafe base64) from the master password using PBKDF2.
 
     Backward compatible wrapper that uses current KDF params.
     """
-    salt, iterations, _ = load_kdf_params()
+    if salt is None or iterations is None:
+        salt, iterations, _ = load_kdf_params()
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -112,12 +119,21 @@ def derive_key_from_password(password: str) -> bytes:
     return key
 
 
-def derive_keys_from_password(password: str) -> Tuple[bytes, bytes, Dict]:
+def derive_keys_from_password(
+    password: str,
+    *,
+    salt: Optional[bytes] = None,
+    iterations: Optional[int] = None,
+    version: Optional[int] = None,
+) -> Tuple[bytes, bytes, Dict]:
     """Derive separate encryption (Fernet) and HMAC keys from password.
 
     Returns (fernet_key_b64, hmac_key_bytes, kdf_meta_dict)
     """
-    salt, iterations, version = load_kdf_params()
+    salt_data = load_kdf_params()
+    salt = salt if salt is not None else salt_data[0]
+    iterations = iterations if iterations is not None else salt_data[1]
+    version = version if version is not None else salt_data[2]
     # Derive 64 bytes and split into two 32-byte keys
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -135,6 +151,19 @@ def derive_keys_from_password(password: str) -> Tuple[bytes, bytes, Dict]:
         "salt": base64.b64encode(salt).decode("ascii"),
     }
     return enc_key, mac_key, meta
+
+
+def _get_configured_mode() -> str:
+    return config.get_setting("key_management.mode", KEY_MODE_FILE)
+
+
+def _require_password_context(master_password: Optional[str]) -> str:
+    password = master_password or _MASTER_PW_CONTEXT
+    if not password:
+        raise ValueError(
+            "Master password context not set; required for password-derived mode"
+        )
+    return password
 
 
 def set_master_password_context(password: Optional[str]) -> None:
@@ -237,23 +266,30 @@ def unprotect_key(master_password: Optional[str] = None) -> bool:
     return True
 
 
-def load_key() -> bytes:
-    """Load the encryption key from file or protected envelope.
+def load_key(
+    master_password: Optional[str] = None, force_file_mode: bool = False
+) -> bytes:
+    """Load the encryption key from file or derive it from the master password.
 
-    If ENC_KEY_FILE exists, requires the master password context to be set.
+    When ``force_file_mode`` is False the configured key management mode decides
+    whether we derive the key from the master password (password-derived mode) or
+    read it from disk (file mode). Set ``force_file_mode`` to ``True`` to bypass
+    the configured mode—used during migrations when we need to access the
+    file-based key regardless of the active setting.
     """
+    if not force_file_mode and _get_configured_mode() == KEY_MODE_PASSWORD:
+        password = _require_password_context(master_password)
+        return derive_key_from_password(password)
+
     enc_key_file = _get_enc_key_file()
     key_file = _get_key_file()
 
     if os.path.exists(enc_key_file):
-        if not _MASTER_PW_CONTEXT:
-            raise ValueError(
-                "Encrypted key present. Set master password context before loading key."
-            )
+        password = _require_password_context(master_password)
         with open(enc_key_file) as f:
             envelope = json.load(f)
         token = base64.b64decode(envelope["ciphertext"])
-        enc_key, mac_key, _ = derive_keys_from_password(_MASTER_PW_CONTEXT)
+        enc_key, mac_key, _ = derive_keys_from_password(password)
         mac = hmac.new(mac_key, token, digestmod="sha256").hexdigest()
         if not hmac.compare_digest(mac, envelope.get("hmac", "")):
             raise ValueError("Key integrity verification failed")
@@ -269,16 +305,25 @@ def load_key() -> bytes:
 # Encryption/Decryption for vault (file key) or with a provided master password for exports
 
 
-def encrypt_password(password: str, master_password: Optional[str] = None) -> bytes:
+def encrypt_password(
+    password: str,
+    master_password: Optional[str] = None,
+    force_mode: Optional[str] = None,
+) -> bytes:
     """
     Encrypt a password string to bytes.
 
     Args:
         password: The password to encrypt
-        master_password: If provided, use password-derived key (for exports); else use file key
+        master_password: If provided, use password-derived key (for exports or migrations)
+        force_mode: Force "file-key" or "password-derived" instead of using the configured mode
     """
-    if master_password:
+    if master_password and force_mode in (None, KEY_MODE_PASSWORD):
         key = derive_key_from_password(master_password)
+    elif force_mode == KEY_MODE_PASSWORD:
+        key = derive_key_from_password(_require_password_context(master_password))
+    elif force_mode == KEY_MODE_FILE:
+        key = load_key(force_file_mode=True)
     else:
         key = load_key()
     f = Fernet(key)
@@ -286,18 +331,25 @@ def encrypt_password(password: str, master_password: Optional[str] = None) -> by
 
 
 def decrypt_password(
-    encrypted_password: bytes, master_password: Optional[str] = None
+    encrypted_password: bytes,
+    master_password: Optional[str] = None,
+    force_mode: Optional[str] = None,
 ) -> str:
     """
     Decrypt an encrypted password bytes to string.
 
     Args:
         encrypted_password: The encrypted password to decrypt
-        master_password: If provided, use password-derived key (for exports); else use file key
+        master_password: If provided, use password-derived key (for exports or migrations)
+        force_mode: Force "file-key" or "password-derived" instead of using the configured mode
     """
     try:
-        if master_password:
+        if master_password and force_mode in (None, KEY_MODE_PASSWORD):
             key = derive_key_from_password(master_password)
+        elif force_mode == KEY_MODE_PASSWORD:
+            key = derive_key_from_password(_require_password_context(master_password))
+        elif force_mode == KEY_MODE_FILE:
+            key = load_key(force_file_mode=True)
         else:
             key = load_key()
         f = Fernet(key)

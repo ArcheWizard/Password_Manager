@@ -36,7 +36,7 @@ password-manager
 | Copy password | `1. Password Vault > 2 > Select entry` | Copies to clipboard and starts auto-clear timer if configured. |
 | Security audit | `2. Security Center` | Runs multiple checks; results summarized with remediation tips. |
 | Backup/restore | `3. Backup & Restore` | Full backups produce zip archives; exports produce encrypted `.dat` files. |
-| Settings | `4. Settings` | Manage categories, KDF parameters, and security preferences. |
+| Settings | `4. Settings` | Manage categories, key mode, KDF benchmarking, Browser Bridge, and security preferences. |
 
 ### Shortcuts & Tips
 
@@ -47,6 +47,29 @@ password-manager
    ```bash
    password-manager --add --website example.com --username alice
    ```
+
+### Browser Bridge (Experimental)
+
+- **Enable/disable**: CLI `Settings > Browser Bridge` or GUI `Settings` tab → "Browser Bridge" panel. The toggle controls whether the FastAPI service starts automatically on launch.
+- **Start/stop service**: Both interfaces expose a dedicated button; the service binds to `http://127.0.0.1:43110` by default (configurable in `settings.json`).
+- **Pair extensions**: Generate a 6-digit pairing code from the same menu. Codes expire after two minutes; share them directly with the requesting extension prompt.
+- **Token management**: View or revoke issued tokens at any time. Tokens are stored in `browser_bridge_tokens.json` under the config directory, and revocation immediately severs the extension’s access.
+- **Security reminder**: The service only listens on localhost, but you should stop or disable it when not using browser automation.
+
+## Key Management & KDF Tuning
+
+### CLI (`Settings > Key management mode` / `KDF tuning wizard`)
+
+1. **Switch modes**: Choose between `File key` (stores `secret.key` on disk) and `Master-password-derived` (derives the data key every unlock, removing the file). The wizard prompts for your master password and displays how many entries were re-encrypted.
+2. **Benchmark PBKDF2**: Enter a target unlock time (default 350 ms). The wizard profiles PBKDF2 on your hardware, shows iteration/time samples, and recommends a value.
+3. **Apply recommendations**: Confirm the salt size (16–64 bytes) and your master password. The CLI re-hashes `auth.json`, rotates the salt metadata, rewraps any protected `secret.key`, and—if password-derived mode is active—re-encrypts every vault entry.
+
+### GUI (`Settings` tab → "Key Management Mode" / "KDF Tuning & Benchmark")
+
+1. **Inspect status**: The panels show the current mode, whether key files exist, the configured iteration counts, and salt length.
+2. **Switch modes**: Click *Switch Mode*, pick the desired option, and confirm with your master password. Progress dialogs keep the UI responsive while the vault is re-encrypted.
+3. **Run benchmark wizard**: Click *Run Benchmark Wizard*, choose a target time, review the measured samples, then accept to apply. The GUI handles salt rotation, master-password rehashing, and key re-protection automatically.
+4. **Post-change checks**: Status labels update immediately; the status bar confirms success, and the `System Information` card reflects the new configuration for audit trails.
 
 ## GUI Workflow (`password-manager-gui`)
 

@@ -10,6 +10,8 @@ A cross-platform vault that stores, audits, and rotates secrets entirely on your
 - **Backup, restore, and export** pipelines with integrity protection, versioned envelopes, and disaster-recovery tooling.
 - **Two-factor authentication (TOTP)**, clipboard hygiene controls, and planned OS-keyring / hardware token support.
 - **Extensible architecture** intended for browser auto-fill bridges, background jobs, and plugin-defined workflows.
+- **Experimental browser bridge** powered by FastAPI + uvicorn, issuing short-lived tokens to paired browser extensions over a localhost RPC channel.
+- **Flexible key management** with a switchable master-password-derived mode, file-key fallback, and an interactive PBKDF2 benchmarking wizard that tunes iterations and salt size per device.
 
 ## Quickstart
 
@@ -30,6 +32,23 @@ password-manager-gui
 ```
 
 > **Tip:** The first run generates `passwords.db`, `secret.key`, `crypto.salt`, `auth.json`, and (if configured) `totp_config.json` in the working directory. Keep these files private and back them up using the provided tooling.
+
+## Key Management & KDF Tuning
+
+- **Switch modes**: In the CLI, visit `Settings → Key management mode`; in the GUI open the `Settings` tab and use the "Key Management Mode" card. Switching to the master-password-derived mode removes `secret.key` and re-encrypts the vault using a key derived each unlock.
+- **Benchmark PBKDF2**: Run the "KDF tuning wizard" (CLI `Settings → KDF tuning wizard`, GUI `Settings` tab). The wizard measures the current CPU, recommends an iteration count for the target unlock time, and optionally rotates the salt size.
+- **Apply new parameters**: When accepting the recommendation, the tool re-hashes `auth.json`, re-wraps any protected `secret.key`, and—if password-derived mode is active—re-encrypts every entry so the new parameters take effect immediately.
+- **Configuration storage**: Selected mode, iteration targets, and salt metadata live in `settings.json` and `crypto.salt`. Backups include these files so restored environments preserve your hardening choices.
+
+## Browser Bridge (Experimental)
+
+The local browser bridge service unlocks auto-fill and audit integrations with upcoming browser extensions. It is disabled by default; enable it from either interface:
+
+1. **CLI** → `Settings > Browser Bridge` to toggle auto-start, launch/stop the service, and manage tokens.
+2. **GUI** → `Settings` tab → "Browser Bridge" panel to flip the enable checkbox, monitor status, and generate pairing codes.
+
+Once enabled, the FastAPI service binds to `http://127.0.0.1:43110` (configurable via `settings.json`) and exposes the endpoints documented in [`docs/browser-extension-ipc.md`](docs/browser-extension-ipc.md). Pair new extensions by generating a 6-digit code; issued tokens are stored in `browser_bridge_tokens.json` under the config directory and can be revoked at any time from the same menus.
+When the feature is marked enabled, the CLI/GUI automatically starts the service on launch and shuts it down cleanly on exit.
 
 ## Documentation Map
 

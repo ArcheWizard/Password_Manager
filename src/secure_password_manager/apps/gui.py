@@ -26,7 +26,9 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QRadioButton,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -35,12 +37,16 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from secure_password_manager.services.browser_bridge import get_browser_bridge_service
+from secure_password_manager.utils import config
+from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import export_passwords, import_passwords
 from secure_password_manager.utils.crypto import (
     decrypt_password,
     encrypt_password,
     is_key_protected,
+    load_kdf_params,
     protect_key_with_master_password,
     set_master_password_context,
 )
@@ -58,7 +64,18 @@ from secure_password_manager.utils.password_analysis import (
     evaluate_password_strength,
     generate_secure_password,
 )
-from secure_password_manager.utils.paths import get_auth_json_path
+from secure_password_manager.utils.key_management import (
+    KeyManagementError,
+    apply_kdf_parameters,
+    benchmark_kdf,
+    get_key_mode,
+    switch_key_mode,
+)
+from secure_password_manager.utils.paths import (
+    get_auth_json_path,
+    get_secret_key_enc_path,
+    get_secret_key_path,
+)
 from secure_password_manager.utils.two_factor import (
     disable_2fa,
     is_2fa_enabled,
@@ -113,8 +130,16 @@ class PasswordManagerApp(QMainWindow):
             # Key is not protected, but we should still set context for potential protection later
             set_master_password_context(password)
 
+        self.browser_bridge_service = get_browser_bridge_service()
+        self._bridge_pairing_message = "Pairing code not generated yet."
+        self.initialize_browser_bridge()
+
         # Create UI
         self.init_ui()
+
+    def initialize_browser_bridge(self) -> None:
+        if config.get_setting("browser_bridge.enabled", False):
+            self.browser_bridge_service.start()
 
     def get_master_password(self):
         """Prompt for master password and return it if authentication succeeds, else None."""
@@ -251,28 +276,22 @@ class PasswordManagerApp(QMainWindow):
         self.setCentralWidget(self.central_widget)
 
         # Create the password manager tab
-        self.passwords_tab = QWidget()
-        self.central_widget.addTab(self.passwords_tab, "Passwords")
+        self.passwords_tab = self._add_tab("Passwords")
 
         # Create the security tab
-        self.security_tab = QWidget()
-        self.central_widget.addTab(self.security_tab, "Security")
+        self.security_tab = self._add_tab("Security", scrollable=True)
 
         # Create the backup tab
-        self.backup_tab = QWidget()
-        self.central_widget.addTab(self.backup_tab, "Backup")
+        self.backup_tab = self._add_tab("Backup", scrollable=True)
 
         # Create the categories tab
-        self.categories_tab = QWidget()
-        self.central_widget.addTab(self.categories_tab, "Categories")
+        self.categories_tab = self._add_tab("Categories", scrollable=True)
 
         # Create the settings tab
-        self.settings_tab = QWidget()
-        self.central_widget.addTab(self.settings_tab, "Settings")
+        self.settings_tab = self._add_tab("Settings", scrollable=True)
 
         # Create the logs tab
-        self.logs_tab = QWidget()
-        self.central_widget.addTab(self.logs_tab, "Logs")
+        self.logs_tab = self._add_tab("Logs", scrollable=True)
 
         # Set up the password manager tab
         self.setup_passwords_tab()
@@ -300,6 +319,20 @@ class PasswordManagerApp(QMainWindow):
 
         # Load passwords
         self.refresh_passwords()
+
+    def _add_tab(self, title: str, scrollable: bool = False) -> QWidget:
+        """Create a tab widget, optionally wrapping it in a scroll area."""
+        if scrollable:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            content = QWidget()
+            scroll.setWidget(content)
+            self.central_widget.addTab(scroll, title)
+            return content
+
+        widget = QWidget()
+        self.central_widget.addTab(widget, title)
+        return widget
 
     def create_toolbar(self):
         """Create a toolbar with common actions"""
@@ -1215,7 +1248,7 @@ class PasswordManagerApp(QMainWindow):
             return
 
         # Show waiting cursor
-        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
         self.statusBar().showMessage("Creating backup...")
 
         try:
@@ -1270,7 +1303,7 @@ class PasswordManagerApp(QMainWindow):
             return
 
         # Show waiting cursor
-        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
         self.statusBar().showMessage("Restoring from backup...")
 
         try:
@@ -1301,7 +1334,7 @@ class PasswordManagerApp(QMainWindow):
         """Run a security audit and display the results"""
         # Show waiting message and cursor
         self.statusBar().showMessage("Running security audit...")
-        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
 
         try:
             # Run the audit
@@ -1616,6 +1649,73 @@ class PasswordManagerApp(QMainWindow):
         key_group.setLayout(key_layout)
         layout.addWidget(key_group)
 
+        # Key Management Mode Section
+        key_mode_group = QGroupBox("Key Management Mode")
+        key_mode_layout = QVBoxLayout()
+
+        self.key_mode_label = QLabel()
+        key_mode_layout.addWidget(self.key_mode_label)
+
+        self.key_mode_switch_btn = QPushButton("Switch Mode")
+        self.key_mode_switch_btn.clicked.connect(self.open_key_mode_dialog)
+        key_mode_layout.addWidget(self.key_mode_switch_btn)
+
+        key_mode_group.setLayout(key_mode_layout)
+        layout.addWidget(key_mode_group)
+
+        # KDF Tuning Section
+        kdf_group = QGroupBox("KDF Tuning & Benchmark")
+        kdf_layout = QVBoxLayout()
+
+        self.kdf_info_label = QLabel()
+        kdf_layout.addWidget(self.kdf_info_label)
+
+        self.kdf_run_btn = QPushButton("Run Benchmark Wizard")
+        self.kdf_run_btn.clicked.connect(self.run_kdf_wizard)
+        kdf_layout.addWidget(self.kdf_run_btn)
+
+        kdf_group.setLayout(kdf_layout)
+        layout.addWidget(kdf_group)
+
+        bridge_group = QGroupBox("Browser Bridge (Experimental)")
+        bridge_layout = QVBoxLayout()
+
+        self.bridge_status_label = QLabel()
+        bridge_layout.addWidget(self.bridge_status_label)
+
+        self.bridge_endpoint_label = QLabel()
+        bridge_layout.addWidget(self.bridge_endpoint_label)
+
+        self.bridge_enable_checkbox = QCheckBox("Enable browser bridge on launch")
+        self.bridge_enable_checkbox.stateChanged.connect(self.toggle_browser_bridge)
+        bridge_layout.addWidget(self.bridge_enable_checkbox)
+
+        controls_row = QHBoxLayout()
+        self.bridge_start_stop_btn = QPushButton()
+        self.bridge_start_stop_btn.clicked.connect(self.start_stop_browser_bridge)
+        controls_row.addWidget(self.bridge_start_stop_btn)
+
+        self.bridge_pair_btn = QPushButton("Generate Pairing Code")
+        self.bridge_pair_btn.clicked.connect(self.generate_browser_bridge_pairing_code)
+        controls_row.addWidget(self.bridge_pair_btn)
+
+        self.bridge_tokens_btn = QPushButton("View Active Tokens")
+        self.bridge_tokens_btn.clicked.connect(self.show_browser_bridge_tokens)
+        controls_row.addWidget(self.bridge_tokens_btn)
+
+        self.bridge_revoke_btn = QPushButton("Revoke Token")
+        self.bridge_revoke_btn.clicked.connect(self.revoke_browser_bridge_token)
+        controls_row.addWidget(self.bridge_revoke_btn)
+
+        controls_row.addStretch()
+        bridge_layout.addLayout(controls_row)
+
+        self.bridge_pairing_label = QLabel(self._bridge_pairing_message)
+        bridge_layout.addWidget(self.bridge_pairing_label)
+
+        bridge_group.setLayout(bridge_layout)
+        layout.addWidget(bridge_group)
+
         # System Information Section
         sys_group = QGroupBox("System Information")
         sys_layout = QVBoxLayout()
@@ -1636,7 +1736,10 @@ class PasswordManagerApp(QMainWindow):
         self.update_2fa_status()
         self.update_2fa_buttons()
         self.update_key_protection_status()
+        self.update_key_mode_status()
+        self.update_kdf_info()
         self.update_system_info()
+        self.update_browser_bridge_widgets()
 
     def setup_logs_tab(self):
         """Set up the activity logs tab"""
@@ -1698,6 +1801,40 @@ class PasswordManagerApp(QMainWindow):
             self.key_status_label.setStyleSheet("color: orange; font-weight: bold;")
             self.protect_key_btn.setText("Enable Key Protection")
 
+    def _format_key_mode_label(self, mode: str) -> str:
+        return (
+            "Master-password-derived (no secret.key)"
+            if mode == KEY_MODE_PASSWORD
+            else "File key stored on disk"
+        )
+
+    def update_key_mode_status(self):
+        """Refresh the key management mode label."""
+        if not hasattr(self, "key_mode_label"):
+            return
+        mode = get_key_mode()
+        key_present = get_secret_key_path().exists() or get_secret_key_enc_path().exists()
+        secret_state = "Secret key present" if key_present else "No secret key stored"
+        self.key_mode_label.setText(
+            f"Mode: {self._format_key_mode_label(mode)}\n{secret_state}"
+        )
+
+    def update_kdf_info(self):
+        """Refresh the KDF summary label."""
+        if not hasattr(self, "kdf_info_label"):
+            return
+        settings = config.load_settings()
+        master_iterations = settings.get("key_management", {}).get(
+            "kdf_iterations", 390_000
+        )
+        salt, crypto_iterations, _ = load_kdf_params()
+        info = (
+            f"Master password iterations: {master_iterations:,}\n"
+            f"Encryption iterations: {crypto_iterations:,}\n"
+            f"Salt size: {len(salt)} bytes"
+        )
+        self.kdf_info_label.setText(info)
+
     def update_system_info(self):
         """Update system information display"""
         import os
@@ -1719,6 +1856,316 @@ class PasswordManagerApp(QMainWindow):
 
         self.system_info_label.setText(info_text)
 
+    def update_browser_bridge_widgets(self):
+        if not hasattr(self, "bridge_status_label"):
+            return
+
+        settings = config.load_settings().get("browser_bridge", {})
+        enabled = settings.get("enabled", False)
+        running = self.browser_bridge_service.is_running
+
+        if running:
+            status_text = "Status: ✓ Running"
+            color = "green"
+        elif enabled:
+            status_text = "Status: ⚠ Enabled (stopped)"
+            color = "orange"
+        else:
+            status_text = "Status: ✗ Disabled"
+            color = "red"
+
+        self.bridge_status_label.setText(status_text)
+        self.bridge_status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+        endpoint = f"http://{settings.get('host', '127.0.0.1')}:{settings.get('port', 43110)}"
+        self.bridge_endpoint_label.setText(f"Endpoint: {endpoint}")
+
+        self.bridge_start_stop_btn.setText(
+            "Stop Service" if running else "Start Service"
+        )
+
+        self.bridge_enable_checkbox.blockSignals(True)
+        self.bridge_enable_checkbox.setChecked(enabled)
+        self.bridge_enable_checkbox.blockSignals(False)
+
+        controls_enabled = running
+        for widget in (
+            self.bridge_pair_btn,
+            self.bridge_tokens_btn,
+            self.bridge_revoke_btn,
+        ):
+            widget.setEnabled(controls_enabled)
+
+        self.bridge_pairing_label.setText(self._bridge_pairing_message)
+
+    def open_key_mode_dialog(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Switch Key Mode")
+        layout = QVBoxLayout()
+        dialog.setLayout(layout)
+
+        description = QLabel(
+            "Choose how the vault encryption key is managed. Switching modes"
+            " will re-encrypt all stored passwords."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        current_mode = get_key_mode()
+        file_radio = QRadioButton("File key stored on disk")
+        derived_radio = QRadioButton("Master-password-derived (no secret.key)")
+        if current_mode == KEY_MODE_PASSWORD:
+            derived_radio.setChecked(True)
+        else:
+            file_radio.setChecked(True)
+        layout.addWidget(file_radio)
+        layout.addWidget(derived_radio)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        target = KEY_MODE_PASSWORD if derived_radio.isChecked() else KEY_MODE_FILE
+        if target == current_mode:
+            QMessageBox.information(self, "Key Mode", "Already using this mode.")
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Switch Key Mode",
+            "This will re-encrypt your vault. Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        master_password, ok = QInputDialog.getText(
+            self,
+            "Confirm Master Password",
+            "Enter your master password:",
+            QLineEdit.Password,
+        )
+        if not ok or not master_password:
+            return
+
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
+        try:
+            result = switch_key_mode(target, master_password)
+            set_master_password_context(master_password)
+            self._master_password = master_password
+            QMessageBox.information(
+                self,
+                "Key Mode Updated",
+                f"Switched to {self._format_key_mode_label(target)}.\n"
+                f"Re-encrypted {result['entries_reencrypted']} entries.",
+            )
+        except KeyManagementError as exc:
+            QMessageBox.critical(self, "Key Mode", str(exc))
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        self.update_key_mode_status()
+        self.update_system_info()
+        self.statusBar().showMessage("Key management mode updated")
+
+    def run_kdf_wizard(self) -> None:
+        settings = config.load_settings()
+        default_target = settings.get("key_management", {}).get(
+            "benchmark_target_ms", 350
+        )
+        target_ms, ok = QInputDialog.getInt(
+            self,
+            "KDF Benchmark",
+            "Target unlock time (ms):",
+            value=default_target,
+            min=50,
+            max=5000,
+        )
+        if not ok:
+            return
+
+        config.update_settings({"key_management": {"benchmark_target_ms": target_ms}})
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
+        try:
+            benchmark = benchmark_kdf(target_ms)
+        except KeyManagementError as exc:
+            QMessageBox.critical(self, "Benchmark Failed", str(exc))
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        samples = benchmark.get("samples", [])
+        if samples:
+            sample_lines = "\n".join(
+                f"{sample['iterations']:,} iters → {sample['duration_ms']:.1f} ms"
+                for sample in samples
+            )
+        else:
+            sample_lines = "No samples recorded."
+
+        recommended = benchmark["recommended_iterations"]
+        est_ms = benchmark["estimated_duration_ms"]
+        message = (
+            f"Recommended iterations: {recommended:,} (~{est_ms:.1f} ms).\n\n"
+            f"Samples:\n{sample_lines}"
+        )
+
+        apply = QMessageBox.question(
+            self,
+            "Apply KDF Parameters",
+            message + "\n\nApply these parameters now?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if apply != QMessageBox.Yes:
+            return
+
+        salt_default = len(load_kdf_params()[0])
+        salt_bytes, ok = QInputDialog.getInt(
+            self,
+            "Salt Size",
+            "Salt size in bytes:",
+            value=salt_default,
+            min=16,
+            max=64,
+        )
+        if not ok:
+            return
+
+        master_password, ok = QInputDialog.getText(
+            self,
+            "Confirm Master Password",
+            "Enter your master password:",
+            QLineEdit.Password,
+        )
+        if not ok or not master_password:
+            return
+
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
+        try:
+            summary = apply_kdf_parameters(master_password, recommended, salt_bytes)
+            set_master_password_context(master_password)
+            self._master_password = master_password
+        except KeyManagementError as exc:
+            QMessageBox.critical(self, "KDF Update Failed", str(exc))
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        info_lines = [
+            f"Iterations: {summary['iterations']:,}",
+            f"Salt size: {summary['salt_bytes']} bytes",
+        ]
+        entries = summary.get("entries_reencrypted", 0)
+        if entries:
+            info_lines.append(f"Re-encrypted entries: {entries}")
+        QMessageBox.information(
+            self,
+            "KDF Updated",
+            "\n".join(info_lines),
+        )
+
+        self.update_kdf_info()
+        self.update_key_mode_status()
+        self.update_system_info()
+        self.statusBar().showMessage("KDF parameters updated")
+
+    def toggle_browser_bridge(self, state: int):
+        enabled = state == 2  # Qt.Checked
+        config.update_settings({"browser_bridge": {"enabled": enabled}})
+        if enabled and not self.browser_bridge_service.is_running:
+            self.browser_bridge_service.start()
+        elif not enabled and self.browser_bridge_service.is_running:
+            self.browser_bridge_service.stop()
+        self.update_browser_bridge_widgets()
+
+    def start_stop_browser_bridge(self):
+        if self.browser_bridge_service.is_running:
+            self.browser_bridge_service.stop()
+        else:
+            self.browser_bridge_service.start()
+        self.update_browser_bridge_widgets()
+
+    def generate_browser_bridge_pairing_code(self):
+        if not self.browser_bridge_service.is_running:
+            QMessageBox.warning(
+                self,
+                "Browser Bridge",
+                "Start the browser bridge service before generating a pairing code.",
+            )
+            return
+
+        record = self.browser_bridge_service.generate_pairing_code()
+        expires = time.strftime("%H:%M:%S", time.localtime(record["expires_at"]))
+        self._bridge_pairing_message = (
+            f"Pairing code: {record['code']} (expires at {expires})"
+        )
+        self.bridge_pairing_label.setText(self._bridge_pairing_message)
+        QMessageBox.information(self, "Browser Bridge", self._bridge_pairing_message)
+
+    def show_browser_bridge_tokens(self):
+        tokens = self.browser_bridge_service.list_tokens()
+        if not tokens:
+            QMessageBox.information(self, "Browser Bridge", "No active tokens.")
+            return
+
+        lines = []
+        for token in tokens:
+            expires = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(token["expires_at"])
+            )
+            preview = f"{token['token'][:6]}...{token['token'][-4:]}"
+            lines.append(
+                f"{preview} · {token.get('browser', 'unknown')} · expires {expires}"
+            )
+
+        QMessageBox.information(self, "Active Tokens", "\n".join(lines))
+
+    def revoke_browser_bridge_token(self):
+        tokens = self.browser_bridge_service.list_tokens()
+        if not tokens:
+            QMessageBox.information(self, "Browser Bridge", "No tokens to revoke.")
+            return
+
+        options = []
+        for idx, token in enumerate(tokens, start=1):
+            expires = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(token["expires_at"])
+            )
+            label = (
+                f"{idx}. {token.get('browser', 'unknown')} "
+                f"({token.get('fingerprint', 'unknown')}) expires {expires}"
+            )
+            options.append(label)
+
+        selection, ok = QInputDialog.getItem(
+            self,
+            "Revoke Token",
+            "Select a token to revoke:",
+            options,
+            0,
+            False,
+        )
+
+        if not ok or not selection:
+            return
+
+        index = options.index(selection)
+        token_value = tokens[index]["token"]
+        if self.browser_bridge_service.revoke_token(token_value):
+            QMessageBox.information(self, "Browser Bridge", "Token revoked.")
+        else:
+            QMessageBox.warning(self, "Browser Bridge", "Failed to revoke token.")
+        self.update_browser_bridge_widgets()
+
+    def closeEvent(self, event):  # type: ignore[override]
+        if hasattr(self, "browser_bridge_service") and self.browser_bridge_service.is_running:
+            self.browser_bridge_service.stop()
+        super().closeEvent(event)
+
     def refresh_logs(self):
         """Refresh the activity logs display"""
         try:
@@ -1733,9 +2180,6 @@ class PasswordManagerApp(QMainWindow):
 
     def change_master_password(self):
         """Dialog to change the master password"""
-        import json
-
-        from secure_password_manager.utils.auth import verify_password
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Change Master Password")
@@ -1777,18 +2221,8 @@ class PasswordManagerApp(QMainWindow):
             confirm_pass = confirm_pw_input.text()
 
             # Validate current password
-            try:
-                with open("auth.json") as f:
-                    auth_data = json.load(f)
-                    auth_hash = auth_data["master_hash"]
-
-                if not verify_password(auth_hash, current_pass):
-                    QMessageBox.warning(self, "Error", "Current password is incorrect.")
-                    return
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Error", f"Could not verify password: {str(e)}"
-                )
+            if not authenticate(current_pass):
+                QMessageBox.warning(self, "Error", "Current password is incorrect.")
                 return
 
             # Validate new password

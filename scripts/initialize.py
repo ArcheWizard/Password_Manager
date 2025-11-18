@@ -1,41 +1,44 @@
-"""Setup script for Password Manager."""
+"""Bootstrap script for Secure Password Manager."""
+
+from __future__ import annotations
 
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
-def setup_project():
-    """Set up the project environment and dependencies."""
-    print("Setting up Password Manager environment...")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-    # Create virtual environment
-    if not os.path.exists("venv"):
+
+def _run(cmd: list[str]) -> None:
+    """Run a subprocess and surface failures immediately."""
+    subprocess.run(cmd, check=True)
+
+
+def setup_project() -> None:
+    """Create a virtualenv and install the editable package."""
+    os.chdir(PROJECT_ROOT)
+    venv_dir = PROJECT_ROOT / "venv"
+    if not venv_dir.exists():
         print("Creating virtual environment...")
-        subprocess.run([sys.executable, "-m", "venv", "venv"])
+        _run([sys.executable, "-m", "venv", str(venv_dir)])
 
-    # Determine activate script (Windows vs Unix)
-    if sys.platform == "win32":
-        activate_script = os.path.join("venv", "Scripts", "activate")
+    if sys.platform.startswith("win"):
+        python_bin = venv_dir / "Scripts" / "python.exe"
+        activate_hint = "venv\\Scripts\\activate"
     else:
-        activate_script = os.path.join("venv", "bin", "activate")
+        python_bin = venv_dir / "bin" / "python"
+        activate_hint = "source venv/bin/activate"
 
-    # Install requirements
-    print("Installing dependencies...")
-    if sys.platform == "win32":
-        subprocess.run("venv\\Scripts\\pip install -r requirements.txt", shell=True)
-    else:
-        subprocess.run("./venv/bin/pip install -r requirements.txt", shell=True)
+    print("Upgrading pip and installing project in editable mode...")
+    _run([str(python_bin), "-m", "pip", "install", "--upgrade", "pip"])
+    _run([str(python_bin), "-m", "pip", "install", "-e", "."])
 
-    print("\nSetup complete! You can now run the Password Manager.")
-    print("\nTo activate the virtual environment:")
-    if sys.platform == "win32":
-        print("   venv\\Scripts\\activate")
-    else:
-        print("   source venv/bin/activate")
-
-    print("\nTo run the application:")
-    print("   python app.py")
+    print("\nSetup complete! Next steps:")
+    print(f"  1. Activate the venv: {activate_hint}")
+    print("  2. Initialize the vault: password-manager --init")
+    print("  3. Launch CLI or GUI: password-manager | password-manager-gui")
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ This reference explains how Secure Password Manager is assembled, including runt
 | Backup | `src/secure_password_manager/utils/backup.py` | Full backups, encrypted exports, restore routines. |
 | Logger | `src/secure_password_manager/utils/logger.py` | Structured logging, log rotation, CLI/GUI friendly formatting. |
 | UI Helpers | `src/secure_password_manager/utils/ui.py`, `interactive.py` | Reusable menu prompts, table renderers, clipboard helpers. |
+| Browser Bridge Service | `src/secure_password_manager/services/browser_bridge.py` | FastAPI/uvicorn server issuing pairing codes and scoped tokens for browser extensions. |
 
 ## Data Flow
 

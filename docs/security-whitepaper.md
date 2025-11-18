@@ -27,8 +27,8 @@ This document describes the security goals, threat model, cryptographic design, 
 
 ## Cryptography
 
-- **Key Derivation**: PBKDF2-HMAC-SHA256 (configurable iterations). Roadmap includes Argon2id and scrypt.
-- **Master Key Storage**: `secret.key` encrypted by a Key Encryption Key (KEK) derived from the master password. Optional mode derives the data key directly each session, removing `secret.key` entirely.
+- **Key Derivation**: PBKDF2-HMAC-SHA256 with user-tunable iterations and salt size. A built-in benchmarking wizard (CLI/GUI) measures device throughput, recommends iteration counts meeting a target unlock time, and rehashes both `auth.json` and the encryption salt metadata so changes take effect immediately. Roadmap includes Argon2id and scrypt.
+- **Master Key Storage**: `secret.key` encrypted by a Key Encryption Key (KEK) derived from the master password. Users can switch to a master-password-derived mode that removes `secret.key` entirely and recreates the vault key on each unlock; the mode switcher re-encrypts all vault entries atomically.
 - **Data Encryption**: Fernet tokens (AES-128-CBC + HMAC-SHA256) per password entry.
 - **Integrity**: Export files contain versioned metadata plus HMAC over ciphertext.
 - **Randomness**: `secrets` module with OS entropy; password generator supports per-character-class entropy tuning.
@@ -49,7 +49,7 @@ This document describes the security goals, threat model, cryptographic design, 
 ## Network Interactions
 
 - Breach checks call Have I Been Pwned range API using first five SHA-1 characters of the password hash, preserving anonymity.
-- Future sync or browser services use a localhost RPC server bound to 127.0.0.1 with mutual authentication tokens.
+- Browser Bridge (initial release) runs a FastAPI server on `127.0.0.1:43110`, issuing short-lived tokens after an in-app pairing ceremony; no traffic leaves the host.
 - Proxy settings and offline breach dictionaries are supported to minimize direct outbound calls.
 
 ## Logging & Telemetry

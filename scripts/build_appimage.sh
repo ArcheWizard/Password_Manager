@@ -63,6 +63,7 @@ mkdir -p "$APPDIR/usr/share/doc/password-manager"
 # Build with PyInstaller
 echo "Building executable with PyInstaller..."
 pyinstaller --clean --onefile --name password-manager-gui \
+    --paths src \
     --add-data "VERSION.txt:." \
     --add-data "README.md:." \
     --hidden-import=cryptography \
@@ -72,7 +73,7 @@ pyinstaller --clean --onefile --name password-manager-gui \
     --hidden-import=qrcode \
     --hidden-import=requests \
     --hidden-import=zxcvbn \
-    apps/gui.py
+    src/secure_password_manager/apps/gui.py
 
 # Copy executable
 echo "Copying executable to AppDir..."

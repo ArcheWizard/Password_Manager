@@ -5,11 +5,12 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
 ## Near Term (0–3 months)
 
 - **Key Management Upgrades**
-  - Offer master-password-derived mode (no `secret.key`).
-  - Surface KDF tuning UI (iterations, memory, salt size) with benchmarking wizard.
+  - ✅ Offer master-password-derived mode (no `secret.key`) with CLI/GUI switching and full vault re-encryption.
+  - ✅ Surface KDF tuning UI (iterations, salt size benchmarking wizard) across both interfaces.
 - **Browser Extension Bridge**
   - Ship local RPC service + Chromium extension prototype.
   - Implement pairing flow, scoped tokens, origin-based consent prompts.
+  - ✅ FastAPI-based local service with pairing codes, CLI/GUI toggles, and token persistence (extension prototype next).
 - **UX Enhancements**
   - Clipboard auto-clear timers across CLI/GUI.
   - Password history with rotation metadata.
@@ -23,6 +24,9 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
 
 ## Mid Term (3–9 months)
 
+- **Architecture Refactor**
+  - Break monolithic CLI/GUI files into feature modules, share services.
+  - Establish plugin API and event bus.
 - **Configurability & Profiles**
   - Custom data directories, portable mode, enterprise policy bundles.
 - **Platform Integrations**
@@ -31,20 +35,17 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
 - **Data Model Growth**
   - Tags + attachments + password history tables.
   - Migration manager with schema version tracking.
-- **Architecture Refactor**
-  - Break monolithic CLI/GUI files into feature modules, share services.
-  - Establish plugin API and event bus.
 - **Automation & Observability**
   - Job scheduler UI, Prometheus/statsd exporters, webhook alerts.
 
 ## Long Term (9+ months)
 
-- **Sync & Collaboration**
-  - Encrypted sync providers (self-hosted server, S3/WebDAV, peer-to-peer).
-  - Shared vaults with role-based permissions.
 - **Advanced Security**
   - Hardware-backed unlock (TPM, Secure Enclave, FIDO2).
   - Key rotation policies, per-entry nonces, envelope encryption redesign.
+- **Sync & Collaboration**
+  - Encrypted sync providers (self-hosted server, S3/WebDAV, peer-to-peer).
+  - Shared vaults with role-based permissions.
 - **Packaging & Distribution**
   - Cross-platform installers (AppImage, Flatpak, MSI, PKG).
   - Signed browser extensions with coordinated release pipeline.

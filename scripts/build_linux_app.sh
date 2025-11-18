@@ -61,8 +61,8 @@ cat > password-manager.spec << 'EOF'
 block_cipher = None
 
 a = Analysis(
-    ['apps/app.py'],
-    pathex=[],
+    ['src/secure_password_manager/apps/app.py'],
+    pathex=['src'],
     binaries=[],
     datas=[('VERSION.txt', '.'), ('README.md', '.')],
     hiddenimports=['cryptography', 'colorama', 'pyperclip', 'pyotp', 'qrcode', 'requests'],
@@ -108,8 +108,8 @@ cat > password-manager-gui.spec << 'EOF'
 block_cipher = None
 
 a = Analysis(
-    ['apps/gui.py'],
-    pathex=[],
+    ['src/secure_password_manager/apps/gui.py'],
+    pathex=['src'],
     binaries=[],
     datas=[('VERSION.txt', '.'), ('README.md', '.')],
     hiddenimports=['cryptography', 'PyQt5', 'pyperclip', 'pyotp', 'qrcode', 'requests', 'zxcvbn'],

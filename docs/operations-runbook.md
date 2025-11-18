@@ -17,6 +17,7 @@ Procedures for keeping Secure Password Manager healthy in production or enterpri
 | `totp_config.json` | Encrypted TOTP configuration (if enabled). |
 | `logs/password_manager.log` | Application log. |
 | `breach_cache.json` | Cached responses from breach lookups. |
+| `browser_bridge_tokens.json` | Token store for paired browser extensions (created when Browser Bridge is enabled). |
 
 ## Routine Tasks
 
@@ -26,6 +27,7 @@ Procedures for keeping Secure Password Manager healthy in production or enterpri
 2. **Weekly**
    - Run full security audit; export report for tracking.
    - Review open issues or vulnerability advisories.
+   - If Browser Bridge is enabled, revoke stale tokens and regenerate codes for unused browsers.
 3. **Monthly**
    - Rotate master password if mandated.
    - Test restore process on a clean machine.
@@ -39,7 +41,17 @@ Procedures for keeping Secure Password Manager healthy in production or enterpri
   - `BACKUP_COMPLETE` / `BACKUP_FAILED`
   - `BREACH_CHECK_ERROR`
   - `SECURITY_AUDIT_RESULT`
+  - `BROWSER_BRIDGE_TOKEN_ISSUED` / `BROWSER_BRIDGE_TOKEN_REVOKED`
 - Configure alerting for repeated login failures, backup failures, or breach API outages.
+
+## Browser Bridge Operations
+
+- **Service control**: Use CLI `Settings > Browser Bridge` or GUI Settings tab to enable, start, or stop the FastAPI service. The daemon listens on `127.0.0.1:43110` by default and shuts down automatically when the app exits.
+- **Token hygiene**: Tokens reside in `browser_bridge_tokens.json`. Delete the file (with the app closed) or use the UI revoke button to invalidate every browser session after an incident.
+- **Troubleshooting**:
+  - If extensions cannot connect, ensure no firewall blocks localhost and confirm the service reports `running` in Settings.
+  - Check logs for `BROWSER_BRIDGE_*` entries to trace pairing attempts.
+  - Port conflicts: adjust `browser_bridge.port` in `settings.json`, then restart the application.
 
 ## Backup Rotation Policy
 

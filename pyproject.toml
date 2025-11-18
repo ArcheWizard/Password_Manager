@@ -37,6 +37,9 @@ dependencies = [
     "pyotp>=2.8.0",
     "qrcode>=7.4.2",
     "typing-extensions>=4.7.1",
+    "fastapi>=0.114.0",
+    "uvicorn[standard]>=0.30.5",
+    "pydantic>=2.7.0",
 ]
 
 [project.optional-dependencies]

@@ -93,7 +93,8 @@ case $choice in
         echo ""
         echo -e "${YELLOW}[3/3] Building Debian Package...${NC}"
         chmod +x scripts/build_deb.sh
-        ./scripts/build_deb.sh        echo ""
+        ./scripts/build_deb.sh
+        echo ""
         echo -e "${GREEN}All packages built successfully!${NC}"
         ;;
     5)

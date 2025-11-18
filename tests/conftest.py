@@ -37,6 +37,7 @@ def test_env(tmp_path, monkeypatch):
     monkeypatch.setattr(
         paths, "get_totp_config_path", lambda: data_dir / "totp_config.json"
     )
+    monkeypatch.setattr(paths, "get_config_dir", lambda: data_dir)
     monkeypatch.setattr(paths, "get_backup_dir", lambda: data_dir / "backups")
     monkeypatch.setattr(
         paths, "get_breach_cache_path", lambda: data_dir / "breach_cache.json"

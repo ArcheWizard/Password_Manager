@@ -4,11 +4,17 @@ import os
 import sqlite3
 import sys
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import pyperclip
 from colorama import Fore, Style, init
 
+from secure_password_manager.services.browser_bridge import (
+    BrowserBridgeService,
+    get_browser_bridge_service,
+)
+from secure_password_manager.utils import config
+from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import (
     create_full_backup,
@@ -19,7 +25,18 @@ from secure_password_manager.utils.backup import (
 from secure_password_manager.utils.crypto import (
     decrypt_password,
     encrypt_password,
+    is_key_protected,
+    load_kdf_params,
+    protect_key_with_master_password,
     set_master_password_context,
+    unprotect_key,
+)
+from secure_password_manager.utils.key_management import (
+    KeyManagementError,
+    apply_kdf_parameters,
+    benchmark_kdf,
+    get_key_mode,
+    switch_key_mode,
 )
 from secure_password_manager.utils.database import (
     add_category,
@@ -52,10 +69,35 @@ from secure_password_manager.utils.ui import (
     print_table,
     print_warning,
 )
-from secure_password_manager.utils.paths import get_database_path
+from secure_password_manager.utils.paths import (
+    get_database_path,
+    get_secret_key_enc_path,
+    get_secret_key_path,
+)
 
 # Initialize Colorama
 init(autoreset=True)
+
+
+def _get_browser_bridge_settings() -> Dict[str, Any]:
+    return config.load_settings().get("browser_bridge", {})
+
+
+def sync_browser_bridge_with_settings() -> None:
+    service = get_browser_bridge_service()
+    settings = _get_browser_bridge_settings()
+    if settings.get("enabled"):
+        if not service.is_running:
+            service.start()
+            log_info("Browser bridge started (settings enabled)")
+    elif service.is_running:
+        service.stop()
+
+
+def shutdown_browser_bridge() -> None:
+    service = get_browser_bridge_service()
+    if service.is_running:
+        service.stop()
 
 
 def main_menu() -> None:
@@ -1001,25 +1043,20 @@ def settings_menu() -> None:
     print_header("Settings")
 
     print_menu_option("1", "Change master password")
-    print_menu_option("2", "View system information")
-    print_menu_option("3", "Clear logs")
-    print_menu_option("4", "Two-Factor Authentication")  # New option
+    print_menu_option("2", "Key management mode")
+    print_menu_option("3", "KDF tuning wizard")
+    print_menu_option("4", "View system information")
+    print_menu_option("5", "Clear logs")
+    print_menu_option("6", "Two-Factor Authentication")
+    print_menu_option("7", "Browser Bridge (Experimental)")
     print_menu_option("0", "Back to main menu")
 
     choice = input(f"{Fore.YELLOW}Select an option: ")
 
     if choice == "1":
-        from utils.auth import set_master_password, verify_password
-
         current_pass = input("Enter current master password: ")
 
-        # Verify current password
-        with open("auth.json") as f:
-            import json
-
-            auth_data = json.load(f)
-
-        if not verify_password(auth_data["master_hash"], current_pass):
+        if not authenticate(current_pass):
             print_error("Incorrect password")
             return
 
@@ -1042,10 +1079,32 @@ def settings_menu() -> None:
                 return
 
         set_master_password(new_pass)
-        print_success("Master password changed successfully")
+        set_master_password_context(new_pass)
+
+        # Re-wrap encryption key if protection enabled
+        if is_key_protected():
+            try:
+                unprotect_key(current_pass)
+                protect_key_with_master_password(new_pass)
+                print_success(
+                    "Master password changed and encryption key re-protected"
+                )
+            except Exception as exc:
+                print_warning(
+                    "Password changed but key re-protection failed: " + str(exc)
+                )
+        else:
+            print_success("Master password changed successfully")
+
         log_info("Master password changed")
 
     elif choice == "2":
+        key_management_menu()
+
+    elif choice == "3":
+        kdf_tuning_wizard()
+
+    elif choice == "4":
         print_header("System Information")
 
         # Database info
@@ -1067,12 +1126,13 @@ def settings_menu() -> None:
         print(f"Passwords with expiry: {expiring_count}")
 
         # File info
-        db_size = (
-            os.path.getsize("passwords.db") if os.path.exists("passwords.db") else 0
-        )
+        db_path = get_database_path()
+        db_size = db_path.stat().st_size if db_path.exists() else 0
         print(f"Database size: {db_size / 1024:.2f} KB")
 
-        key_exists = os.path.exists("secret.key")
+        key_path = get_secret_key_path()
+        enc_key_path = get_secret_key_enc_path()
+        key_exists = key_path.exists() or enc_key_path.exists()
         print(f"Encryption key: {'Present' if key_exists else 'Missing'}")
 
         # Version info
@@ -1083,7 +1143,7 @@ def settings_menu() -> None:
 
         input("\nPress Enter to continue...")
 
-    elif choice == "3":
+    elif choice == "5":
         confirm = input("Are you sure you want to clear logs? (y/n): ")
         if confirm.lower() == "y":
             from utils.logger import clear_logs
@@ -1093,8 +1153,11 @@ def settings_menu() -> None:
             else:
                 print_error("Failed to clear logs")
 
-    elif choice == "4":
+    elif choice == "6":
         twofa_menu()
+
+    elif choice == "7":
+        browser_bridge_menu()
 
 
 def twofa_menu() -> None:
@@ -1161,6 +1224,243 @@ def twofa_menu() -> None:
             else:
                 print_error("Failed to verify 2FA setup. 2FA has not been enabled.")
                 disable_2fa()
+
+
+def browser_bridge_menu() -> None:
+    """Configure and inspect the browser bridge service."""
+    service = get_browser_bridge_service()
+
+    while True:
+        settings = _get_browser_bridge_settings()
+        endpoint = f"http://{settings.get('host', '127.0.0.1')}:{settings.get('port', 43110)}"
+
+        print_header("Browser Bridge (Experimental)")
+        print(f"Enabled: {'Yes' if settings.get('enabled') else 'No'}")
+        print(f"Service running: {'Yes' if service.is_running else 'No'}")
+        print(f"Endpoint: {endpoint}")
+        print_menu_option("1", "Toggle enable/disable")
+        print_menu_option("2", "Start/stop service")
+        print_menu_option("3", "Generate pairing code")
+        print_menu_option("4", "View active tokens")
+        print_menu_option("5", "Revoke token")
+        print_menu_option("0", "Back to settings")
+
+        choice = input(f"{Fore.YELLOW}Select an option: ").strip()
+
+        if choice == "1":
+            enabled = not settings.get("enabled", False)
+            config.update_settings({"browser_bridge": {"enabled": enabled}})
+            if enabled:
+                service.start()
+                log_info("Browser bridge enabled via CLI settings")
+                print_success("Browser bridge enabled and started")
+            else:
+                service.stop()
+                log_info("Browser bridge disabled via CLI settings")
+                print_warning("Browser bridge disabled and stopped")
+
+        elif choice == "2":
+            if service.is_running:
+                service.stop()
+                print_success("Browser bridge stopped")
+            else:
+                service.start()
+                print_success("Browser bridge started")
+
+        elif choice == "3":
+            if not service.is_running:
+                print_warning("Start the browser bridge before generating a pairing code.")
+                continue
+            record = service.generate_pairing_code()
+            expires = time.strftime("%H:%M:%S", time.localtime(record["expires_at"]))
+            print_success(
+                f"Pairing code: {record['code']} (expires at {expires})"
+            )
+
+        elif choice == "4":
+            tokens = service.list_tokens()
+            if not tokens:
+                print_warning("No active tokens.")
+            else:
+                print("\nActive tokens:")
+                _print_tokens(tokens)
+                input("\nPress Enter to continue...")
+
+        elif choice == "5":
+            tokens = service.list_tokens()
+            if not tokens:
+                print_warning("No tokens to revoke.")
+                continue
+            _print_tokens(tokens)
+            selection = input("Enter token number to revoke: ")
+            if not selection.isdigit():
+                print_error("Invalid selection")
+                continue
+            index = int(selection) - 1
+            if not 0 <= index < len(tokens):
+                print_error("Invalid selection")
+                continue
+            token_value = tokens[index]["token"]
+            if service.revoke_token(token_value):
+                print_success("Token revoked")
+            else:
+                print_error("Failed to revoke token")
+
+        elif choice == "0":
+            break
+
+        else:
+            print_error("Invalid option, please try again.")
+
+
+def _print_tokens(tokens: List[Dict[str, Any]]) -> None:
+    for idx, token in enumerate(tokens, start=1):
+        expires = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(token["expires_at"]))
+        fingerprint = token.get("fingerprint", "unknown")
+        browser = token.get("browser", "unknown")
+        preview = f"{token['token'][:6]}...{token['token'][-4:]}"
+        print(
+            f"[{idx}] {preview} | {browser} | fingerprint={fingerprint} | expires={expires}"
+        )
+
+
+def _format_key_mode_label(mode: str) -> str:
+    return (
+        "Master-password-derived (no secret.key)"
+        if mode == KEY_MODE_PASSWORD
+        else "File key (secret.key on disk)"
+    )
+
+
+def key_management_menu() -> None:
+    """Allow users to switch between key management modes."""
+    while True:
+        mode = get_key_mode()
+        print_header("Key Management Mode")
+        print(f"Current mode: {_format_key_mode_label(mode)}")
+        key_present = get_secret_key_path().exists() or get_secret_key_enc_path().exists()
+        print(f"Secret key files present: {'Yes' if key_present else 'No'}")
+        print_menu_option("1", "Switch to master-password-derived mode")
+        print_menu_option("2", "Switch to file-key mode")
+        print_menu_option("0", "Back to settings")
+
+        choice = input(f"{Fore.YELLOW}Select an option: ").strip()
+        if choice == "0":
+            break
+        if choice not in {"1", "2"}:
+            print_error("Invalid option, please try again.")
+            continue
+
+        target = KEY_MODE_PASSWORD if choice == "1" else KEY_MODE_FILE
+        if target == mode:
+            print_warning("Already using that key mode.")
+            continue
+
+        master_password = input("Re-enter master password to confirm: ")
+        if not authenticate(master_password):
+            print_error("Master password verification failed.")
+            continue
+
+        print_warning("Re-encrypting vault. This may take a moment...")
+        try:
+            result = switch_key_mode(target, master_password)
+            set_master_password_context(master_password)
+            log_info(f"Switched key mode to {target}")
+            print_success(
+                f"Switched to {_format_key_mode_label(target)}"
+                f" (re-encrypted {result['entries_reencrypted']} entries)"
+            )
+        except KeyManagementError as exc:
+            print_error(f"Failed to switch key mode: {exc}")
+
+
+def kdf_tuning_wizard() -> None:
+    """Interactive wizard that benchmarks and updates PBKDF2 parameters."""
+    settings = config.load_settings()
+    current_iteration_setting = settings.get("key_management", {}).get(
+        "kdf_iterations", 390_000
+    )
+    target_default = settings.get("key_management", {}).get("benchmark_target_ms", 350)
+    salt, crypto_iterations, _ = load_kdf_params()
+
+    print_header("KDF Tuning Wizard")
+    print(f"Master password hash iterations: {current_iteration_setting:,}")
+    print(f"Encryption/key-wrapping iterations: {crypto_iterations:,}")
+    print(f"Salt size: {len(salt)} bytes")
+
+    target_input = input(
+        f"Target unlock time in milliseconds [{target_default}]: "
+    ).strip()
+    if target_input:
+        try:
+            target_ms = int(target_input)
+        except ValueError:
+            print_error("Invalid target value.")
+            return
+    else:
+        target_ms = target_default
+
+    if target_ms < 50:
+        print_error("Target must be at least 50 ms.")
+        return
+
+    config.update_settings({"key_management": {"benchmark_target_ms": target_ms}})
+    print_warning("Running PBKDF2 benchmark...")
+
+    try:
+        benchmark = benchmark_kdf(target_ms)
+    except KeyManagementError as exc:
+        print_error(f"Benchmark failed: {exc}")
+        return
+
+    samples = benchmark.get("samples", [])
+    if samples:
+        print("\nSamples:")
+        for sample in samples:
+            print(
+                f"  - {sample['iterations']:,} iterations -> {sample['duration_ms']:.1f} ms"
+            )
+
+    recommended = benchmark["recommended_iterations"]
+    est_ms = benchmark["estimated_duration_ms"]
+    print_success(
+        f"Recommended iterations: {recommended:,} (~{est_ms:.1f} ms on this machine)"
+    )
+
+    apply_choice = input("Apply these parameters now? (y/n): ").strip().lower()
+    if apply_choice != "y":
+        return
+
+    salt_prompt = input(f"Salt size in bytes (default {len(salt)}): ").strip()
+    salt_bytes = len(salt)
+    if salt_prompt:
+        try:
+            salt_bytes = int(salt_prompt)
+        except ValueError:
+            print_error("Invalid salt size.")
+            return
+
+    master_password = input("Re-enter master password to confirm: ")
+    print_warning("Applying new KDF parameters. This may take a moment...")
+
+    try:
+        summary = apply_kdf_parameters(master_password, recommended, salt_bytes)
+        set_master_password_context(master_password)
+        log_info(
+            "KDF parameters updated via CLI wizard"
+        )
+    except KeyManagementError as exc:
+        print_error(f"Failed to update KDF parameters: {exc}")
+        return
+
+    print_success(
+        f"Updated KDF to {summary['iterations']:,} iterations with {summary['salt_bytes']} byte salt"
+    )
+    entries = summary.get("entries_reencrypted", 0)
+    if entries:
+        print(f"Re-encrypted {entries} stored passwords.")
+    if summary.get("password_mode"):
+        print("Master-password-derived vault re-wrapped with new parameters.")
 
 
 def login() -> bool:
@@ -1237,67 +1537,72 @@ def main() -> int:
     """Main entry point for command line application."""
     init_db()
 
-    # Try authentication up to 3 times
-    authenticated = False
-    for attempt in range(3):
-        if login():
-            authenticated = True
-            break
-        print_warning(f"Login failed. {2 - attempt} attempts remaining.")
+    try:
+        # Try authentication up to 3 times
+        authenticated = False
+        for attempt in range(3):
+            if login():
+                authenticated = True
+                break
+            print_warning(f"Login failed. {2 - attempt} attempts remaining.")
 
-    if not authenticated:
-        print_error("Too many failed attempts. Exiting.")
-        return 1
+        if not authenticated:
+            print_error("Too many failed attempts. Exiting.")
+            return 1
 
-    while True:
-        main_menu()
-        choice = input(f"{Fore.YELLOW}Select an option: ")
+        sync_browser_bridge_with_settings()
 
-        if choice == "1":
-            passwords_menu()
-            password_choice = input(f"{Fore.YELLOW}Select an option: ")
-            if password_choice == "1":
-                add_new_password()
-            elif password_choice == "2":
-                view_passwords()
-            elif password_choice == "3":
-                search_passwords()
-            elif password_choice == "4":
-                edit_password()
-            elif password_choice == "5":
-                delete_password_entry()
-            elif password_choice == "6":
-                generate_password_tool()
-            elif password_choice == "7":
-                check_expiring_passwords()
-            elif password_choice == "0":
-                continue
+        while True:
+            main_menu()
+            choice = input(f"{Fore.YELLOW}Select an option: ")
+
+            if choice == "1":
+                passwords_menu()
+                password_choice = input(f"{Fore.YELLOW}Select an option: ")
+                if password_choice == "1":
+                    add_new_password()
+                elif password_choice == "2":
+                    view_passwords()
+                elif password_choice == "3":
+                    search_passwords()
+                elif password_choice == "4":
+                    edit_password()
+                elif password_choice == "5":
+                    delete_password_entry()
+                elif password_choice == "6":
+                    generate_password_tool()
+                elif password_choice == "7":
+                    check_expiring_passwords()
+                elif password_choice == "0":
+                    continue
+                else:
+                    print_error("Invalid option, please try again.")
+
+            elif choice == "2":
+                categories_menu()
+
+            elif choice == "3":
+                backup_menu()
+
+            elif choice == "4":
+                settings_menu()
+
+            elif choice == "5":
+                view_logs()
+
+            elif choice == "6":
+                security_audit_menu()
+
+            elif choice == "0":
+                print(Fore.MAGENTA + "Goodbye!")
+                break
+
             else:
                 print_error("Invalid option, please try again.")
 
-        elif choice == "2":
-            categories_menu()
-
-        elif choice == "3":
-            backup_menu()
-
-        elif choice == "4":
-            settings_menu()
-
-        elif choice == "5":
-            view_logs()
-
-        elif choice == "6":
-            security_audit_menu()
-
-        elif choice == "0":
-            print(Fore.MAGENTA + "Goodbye!")
-            break
-
-        else:
-            print_error("Invalid option, please try again.")
-
-    return 0
+        return 0
+    finally:
+        shutdown_browser_bridge()
 
 
 if __name__ == "__main__":

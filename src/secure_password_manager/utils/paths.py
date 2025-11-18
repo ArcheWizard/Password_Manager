@@ -200,6 +200,11 @@ def get_totp_config_path() -> Path:
     return get_config_dir() / "totp_config.json"
 
 
+def get_browser_bridge_tokens_path() -> Path:
+    """Get the path to the browser bridge token store file."""
+    return get_config_dir() / "browser_bridge_tokens.json"
+
+
 def migrate_legacy_files() -> None:
     """
     Migrate files from project root to proper directories.
