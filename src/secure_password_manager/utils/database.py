@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from secure_password_manager.utils.paths import get_database_path
+from secure_password_manager.utils.logger import log_info
 
 
 def _get_db_file() -> str:
@@ -14,6 +15,8 @@ def _get_db_file() -> str:
 
 def init_db() -> None:
     """Initialize the database and create tables if not exists."""
+    from secure_password_manager.utils.migrations import ensure_latest_schema
+
     conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
 
@@ -63,6 +66,9 @@ def init_db() -> None:
 
     conn.commit()
     conn.close()
+
+    # Run any pending migrations
+    ensure_latest_schema()
 
 
 def add_password(
@@ -164,6 +170,7 @@ def update_password(
     notes: Optional[str] = None,
     expiry_days: Optional[int] = None,
     favorite: Optional[bool] = None,
+    rotation_reason: str = "manual",
 ) -> None:
     """Update a password entry with new information."""
     conn = sqlite3.connect(_get_db_file())
@@ -191,6 +198,11 @@ def update_password(
         "favorite",
     ]
     col_idx = {col: i for i, col in enumerate(columns)}
+
+    # If password is being changed, save old password to history
+    if encrypted_password is not None and encrypted_password != current[col_idx["password"]]:
+        old_password = current[col_idx["password"]]
+        add_password_history(entry_id, old_password, rotation_reason)
 
     # Prepare update values
     current_time = int(time.time())
@@ -267,3 +279,122 @@ def get_expiring_passwords(days: int = 30) -> List[Tuple]:
     rows = cursor.fetchall()
     conn.close()
     return rows
+
+
+def add_password_history(
+    password_id: int,
+    old_password: bytes,
+    rotation_reason: str = "manual",
+    changed_by: str = "user",
+) -> None:
+    """
+    Add a password change to history.
+
+    Args:
+        password_id: The ID of the password entry.
+        old_password: The old encrypted password.
+        rotation_reason: Reason for rotation (manual, expiry, breach, strength).
+        changed_by: Who changed it (user, system, auto-rotate).
+    """
+    conn = sqlite3.connect(_get_db_file())
+    cursor = conn.cursor()
+
+    current_time = int(time.time())
+
+    cursor.execute("""
+        INSERT INTO password_history
+        (password_id, old_password, changed_at, rotation_reason, changed_by)
+        VALUES (?, ?, ?, ?, ?)
+    """, (password_id, old_password, current_time, rotation_reason, changed_by))
+
+    conn.commit()
+
+    # Enforce retention limit (keep last 10 versions by default)
+    from secure_password_manager.utils import config
+    max_history = config.get_setting("password_history.max_versions", 10)
+
+    if max_history > 0:
+        cursor.execute("""
+            DELETE FROM password_history
+            WHERE password_id = ?
+            AND id NOT IN (
+                SELECT id FROM password_history
+                WHERE password_id = ?
+                ORDER BY changed_at DESC
+                LIMIT ?
+            )
+        """, (password_id, password_id, max_history))
+        conn.commit()
+
+    conn.close()
+    log_info(f"Password history recorded for entry {password_id}, reason: {rotation_reason}")
+
+
+def get_password_history(password_id: int, limit: int = 10) -> List[Tuple]:
+    """
+    Get password change history for an entry.
+
+    Args:
+        password_id: The ID of the password entry.
+        limit: Maximum number of history entries to return.
+
+    Returns:
+        List of tuples: (id, password_id, old_password, changed_at, rotation_reason, changed_by)
+    """
+    conn = sqlite3.connect(_get_db_file())
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, password_id, old_password, changed_at, rotation_reason, changed_by
+        FROM password_history
+        WHERE password_id = ?
+        ORDER BY changed_at DESC
+        LIMIT ?
+    """, (password_id, limit))
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def get_all_password_history(limit: int = 50) -> List[Tuple]:
+    """
+    Get recent password changes across all entries.
+
+    Args:
+        limit: Maximum number of history entries to return.
+
+    Returns:
+        List of tuples with password details and history.
+    """
+    conn = sqlite3.connect(_get_db_file())
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            ph.id,
+            ph.password_id,
+            p.website,
+            p.username,
+            ph.changed_at,
+            ph.rotation_reason,
+            ph.changed_by
+        FROM password_history ph
+        JOIN passwords p ON ph.password_id = p.id
+        ORDER BY ph.changed_at DESC
+        LIMIT ?
+    """, (limit,))
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def delete_password_history(password_id: int) -> None:
+    """Delete all history for a password entry."""
+    conn = sqlite3.connect(_get_db_file())
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM password_history WHERE password_id = ?", (password_id,))
+    conn.commit()
+    conn.close()
+    log_info(f"Password history deleted for entry {password_id}")

@@ -31,7 +31,8 @@ This reference explains how Secure Password Manager is assembled, including runt
 | Authentication | `src/secure_password_manager/utils/auth.py` | Master password setup/verification, login rate limiting. |
 | Crypto | `src/secure_password_manager/utils/crypto.py` | Key generation, Fernet encryption/decryption, PBKDF2 derivation, key protection. |
 | Key Management | `src/secure_password_manager/utils/key_management.py` | Mode switching (file-key ⇌ password-derived), KDF benchmarking, parameter tuning. |
-| Database | `src/secure_password_manager/utils/database.py` | Schema creation, CRUD helpers, query utilities (favorites, expiring, search). |
+| Database | `src/secure_password_manager/utils/database.py` | Schema creation, CRUD helpers, query utilities (favorites, expiring, search), password history tracking. |
+| Migrations | `src/secure_password_manager/utils/migrations.py` | Database schema versioning and migration management. |
 | Password Analysis | `src/secure_password_manager/utils/password_analysis.py` | Strength scoring, entropy, generator logic. |
 | Security Audit | `src/secure_password_manager/utils/security_audit.py` & `security_analyzer.py` | Weak/reused/expired/breached detection, scoring. |
 | Two-Factor | `src/secure_password_manager/utils/two_factor.py` | TOTP enrollment/verification, QR provisioning. |

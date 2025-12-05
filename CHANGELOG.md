@@ -2,6 +2,31 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [1.9.0] - 2024-12-05
+
+### Added
+
+- Password history with rotation metadata tracking all password changes.
+- Database migration system for schema versioning and upgrades.
+- `password_history` table with rotation reasons (manual, expiry, breach, strength).
+- CLI and GUI interfaces for viewing password change history.
+- Configurable retention policy (default: keep last 10 versions).
+- Rotation reason selection when updating passwords in both CLI and GUI.
+- History viewing with filtering and detailed change logs.
+- Comprehensive test suite (11 tests) for password history functionality.
+
+### Changed
+
+- `update_password()` function now accepts `rotation_reason` parameter.
+- Database initialization now runs pending migrations automatically.
+- Config includes `password_history` settings (enabled by default, max_versions: 10).
+
+### Fixed
+
+- N/A
+
+---
+
 ## [1.8.5] - 2024-12-05
 
 ### Added

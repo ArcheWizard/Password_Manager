@@ -33,9 +33,25 @@ This document defines the structure of the vault database, supporting configurat
 | `color` | TEXT | Hex or ANSI code. |
 | `icon` | TEXT | Optional icon/font reference. |
 
-### metadata (planned)
+### password_history
 
-- Stores schema version, migration history, user preferences.
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | INTEGER PRIMARY KEY AUTOINCREMENT | History entry identifier. |
+| `password_id` | INTEGER NOT NULL | Foreign key to passwords table. |
+| `old_password` | BLOB NOT NULL | Fernet-encrypted old password. |
+| `changed_at` | INTEGER NOT NULL | Unix timestamp of change. |
+| `rotation_reason` | TEXT DEFAULT 'manual' | Reason: manual, expiry, breach, strength. |
+| `changed_by` | TEXT DEFAULT 'user' | Who made the change (user, system, auto-rotate). |
+
+### metadata
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `key` | TEXT PRIMARY KEY | Setting key. |
+| `value` | TEXT NOT NULL | Setting value (JSON-encoded if complex). |
+
+Stores schema version, migration history, user preferences.
 
 ### tags & password_tags (planned)
 

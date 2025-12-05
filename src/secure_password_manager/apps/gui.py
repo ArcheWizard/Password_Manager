@@ -56,6 +56,7 @@ from secure_password_manager.utils.database import (
     delete_password,
     get_categories,
     get_passwords,
+    get_password_history,
     init_db,
     update_password,
 )
@@ -711,6 +712,10 @@ class PasswordManagerApp(QMainWindow):
         toggle_btn.clicked.connect(lambda: self.toggle_favorite(auto_close=menu))
         layout.addWidget(toggle_btn)
 
+        history_btn = QPushButton("View History")
+        history_btn.clicked.connect(lambda: self.view_password_history(auto_close=menu))
+        layout.addWidget(history_btn)
+
         edit_btn = QPushButton("Edit Password")
         edit_btn.clicked.connect(lambda: self.edit_password(auto_close=menu))
         layout.addWidget(edit_btn)
@@ -764,6 +769,100 @@ class PasswordManagerApp(QMainWindow):
 
         if auto_close:
             auto_close.close()
+
+    def view_password_history(self, auto_close=None):
+        """View password change history for selected entry"""
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Error", "No password selected")
+            return
+
+        row = selected[0].row()
+        entry_id = int(self.table.item(row, 0).text())
+        website = self.table.item(row, 1).text()
+        username = self.table.item(row, 2).text()
+
+        # Get history
+        history = get_password_history(entry_id)
+
+        if not history:
+            QMessageBox.information(
+                self,
+                "Password History",
+                f"No password history found for {website} ({username})"
+            )
+            if auto_close:
+                auto_close.close()
+            return
+
+        # Create history dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Password History - {website}")
+        dialog.setMinimumWidth(700)
+        dialog.setMinimumHeight(400)
+
+        layout = QVBoxLayout(dialog)
+
+        # Info label
+        info_label = QLabel(f"<b>Password history for:</b> {website} ({username})")
+        layout.addWidget(info_label)
+
+        # History table
+        history_table = QTableWidget()
+        history_table.setColumnCount(4)
+        history_table.setHorizontalHeaderLabels([
+            "#", "Old Password", "Changed At", "Reason"
+        ])
+        history_table.setRowCount(len(history))
+        history_table.setAlternatingRowColors(True)
+        history_table.setSelectionBehavior(QTableWidget.SelectRows)
+        history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        history_table.horizontalHeader().setStretchLastSection(True)
+        history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
+        # Populate history
+        for i, hist in enumerate(history):
+            hist_id, _, old_encrypted, changed_at, reason, changed_by = hist
+
+            # Decrypt old password
+            try:
+                old_password = decrypt_password(old_encrypted)
+            except Exception:
+                old_password = "[Could not decrypt]"
+
+            # Format date
+            changed_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(changed_at))
+
+            # Create items
+            history_table.setItem(i, 0, QTableWidgetItem(str(hist_id)))
+            history_table.setItem(i, 1, QTableWidgetItem(old_password))
+            history_table.setItem(i, 2, QTableWidgetItem(changed_str))
+            history_table.setItem(i, 3, QTableWidgetItem(reason.capitalize()))
+
+            # Color-code reason
+            reason_item = history_table.item(i, 3)
+            if reason == "breach":
+                reason_item.setForeground(QColor("red"))
+            elif reason == "strength":
+                reason_item.setForeground(QColor("orange"))
+            elif reason == "expiry":
+                reason_item.setForeground(QColor("blue"))
+
+        layout.addWidget(history_table)
+
+        # Summary label
+        summary_label = QLabel(f"<i>Total changes: {len(history)}</i>")
+        layout.addWidget(summary_label)
+
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.close)
+        layout.addWidget(close_btn)
+
+        if auto_close:
+            auto_close.close()
+
+        dialog.exec_()
 
     def toggle_favorite(self, auto_close=None):
         """Toggle favorite status for selected password"""
@@ -1118,8 +1217,33 @@ class PasswordManagerApp(QMainWindow):
                     if confirm == QMessageBox.No:
                         return
 
-                # Encrypt the new password
+            # Encrypt the new password and determine rotation reason
+            rotation_reason = "manual"
+            if new_password != password:
                 encrypted_password = encrypt_password(new_password)
+
+                # Show rotation reason dialog if password changed
+                reason_msg = QMessageBox()
+                reason_msg.setWindowTitle("Password Change Reason")
+                reason_msg.setText("Why are you changing this password?")
+                reason_msg.setIcon(QMessageBox.Question)
+
+                manual_btn = reason_msg.addButton("Manual Update", QMessageBox.ActionRole)
+                expiry_btn = reason_msg.addButton("Password Expired", QMessageBox.ActionRole)
+                breach_btn = reason_msg.addButton("Security Breach", QMessageBox.ActionRole)
+                strength_btn = reason_msg.addButton("Weak Password", QMessageBox.ActionRole)
+
+                reason_msg.exec_()
+
+                clicked = reason_msg.clickedButton()
+                if clicked == manual_btn:
+                    rotation_reason = "manual"
+                elif clicked == expiry_btn:
+                    rotation_reason = "expiry"
+                elif clicked == breach_btn:
+                    rotation_reason = "breach"
+                elif clicked == strength_btn:
+                    rotation_reason = "strength"
 
             # Parse expiry days
             expiry_days = None
@@ -1140,6 +1264,7 @@ class PasswordManagerApp(QMainWindow):
                 notes=new_notes if new_notes != notes else None,
                 expiry_days=expiry_days,
                 favorite=new_favorite if new_favorite != favorite else None,
+                rotation_reason=rotation_reason,
             )
 
             dialog.accept()

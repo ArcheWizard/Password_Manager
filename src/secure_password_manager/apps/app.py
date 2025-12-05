@@ -45,6 +45,8 @@ from secure_password_manager.utils.database import (
     get_categories,
     get_expiring_passwords,
     get_passwords,
+    get_password_history,
+    get_all_password_history,
     init_db,
     update_password,
 )
@@ -294,6 +296,7 @@ def view_passwords(
     print("\nOptions:")
     print("  [c] Copy password to clipboard")
     print("  [f] Mark/unmark as favorite")
+    print("  [h] View password history")
     print("  [d] Delete password")
     print("  [e] Edit password")
     print("  [q] Back to menu")
@@ -331,6 +334,9 @@ def view_passwords(
                 print_error("Invalid ID")
         except ValueError:
             print_error("Invalid ID. Please enter a number.")
+
+    elif choice == "h":
+        view_password_history_entry()
 
     elif choice == "d":
         delete_password_entry()
@@ -379,6 +385,81 @@ def delete_password_entry() -> None:
         delete_password(entry_id)
         print_success("Password deleted successfully!")
         log_info(f"Deleted password for {website} (ID: {entry_id})")
+    except ValueError:
+        print_error("Invalid ID. Please enter a number.")
+
+
+def view_password_history_entry() -> None:
+    """View password change history for an entry."""
+    print_header("Password History")
+    entry_id = input("Enter ID of the password to view history: ")
+
+    try:
+        entry_id = int(entry_id)
+
+        # Get the entry details
+        entries = get_passwords()
+        target_entry = None
+
+        for entry in entries:
+            if entry[0] == entry_id:
+                target_entry = entry
+                break
+
+        if not target_entry:
+            print_error(f"No password found with ID {entry_id}")
+            return
+
+        website = target_entry[1]
+        username = target_entry[2]
+
+        print(f"\nPassword history for: {Fore.CYAN}{website}{Style.RESET_ALL} ({username})\n")
+
+        # Get history
+        history = get_password_history(entry_id)
+
+        if not history:
+            print_warning("No password history found for this entry")
+            return
+
+        # Display history table
+        rows = []
+        for hist in history:
+            hist_id, _, old_encrypted, changed_at, reason, changed_by = hist
+
+            # Decrypt old password
+            try:
+                old_password = decrypt_password(old_encrypted)
+            except Exception:
+                old_password = "[Could not decrypt]"
+
+            # Format date
+            changed_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(changed_at))
+
+            # Format reason with color
+            reason_color = Fore.YELLOW
+            if reason == "breach":
+                reason_color = Fore.RED
+            elif reason == "strength":
+                reason_color = Fore.YELLOW
+            elif reason == "expiry":
+                reason_color = Fore.BLUE
+
+            reason_display = f"{reason_color}{reason.capitalize()}{Style.RESET_ALL}"
+
+            rows.append([
+                hist_id,
+                old_password,
+                changed_str,
+                reason_display,
+                changed_by,
+            ])
+
+        headers = ["#", "Old Password", "Changed At", "Reason", "Changed By"]
+        print_table(headers, rows)
+
+        print(f"\nTotal changes: {len(history)}")
+
     except ValueError:
         print_error("Invalid ID. Please enter a number.")
 
@@ -531,8 +612,24 @@ def edit_password() -> None:
             new_favorite = favorite
 
         # Update the entry
+        rotation_reason = "manual"
         if new_password != password:
             encrypted_password = encrypt_password(new_password)
+            # Ask for rotation reason if password changed
+            print("\nReason for password change:")
+            print(f"{Fore.YELLOW}[1]{Fore.RESET} Manual update")
+            print(f"{Fore.YELLOW}[2]{Fore.RESET} Password expired")
+            print(f"{Fore.YELLOW}[3]{Fore.RESET} Security breach")
+            print(f"{Fore.YELLOW}[4]{Fore.RESET} Weak password")
+            reason_choice = input("Select reason (default: 1): ").strip() or "1"
+
+            reason_map = {
+                "1": "manual",
+                "2": "expiry",
+                "3": "breach",
+                "4": "strength"
+            }
+            rotation_reason = reason_map.get(reason_choice, "manual")
         else:
             encrypted_password = None  # No change
 
@@ -545,6 +642,7 @@ def edit_password() -> None:
             notes=new_notes if new_notes != notes else None,
             expiry_days=new_expiry_days,
             favorite=new_favorite if new_favorite != favorite else None,
+            rotation_reason=rotation_reason,
         )
 
         print_success("Password updated successfully!")

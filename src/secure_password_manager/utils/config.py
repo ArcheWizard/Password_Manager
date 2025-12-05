@@ -26,6 +26,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "clipboard": {
         "auto_clear_seconds": 25,
     },
+    "password_history": {
+        "enabled": True,
+        "max_versions": 10,
+    },
     "browser_bridge": {
         "enabled": False,
         "host": "127.0.0.1",

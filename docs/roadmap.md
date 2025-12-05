@@ -14,7 +14,7 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
   - Add TLS support with certificate pinning for localhost connections.
 - **UX Enhancements**
   - ✅ Clipboard auto-clear timers across CLI/GUI.
-  - Password history with rotation metadata.
+  - ✅ Password history with rotation metadata.
   - Category manager with colors/icons and persistent filters.
 - **Security Audit Enhancements**
   - Parallelized breach checks with offline dictionary update packs.

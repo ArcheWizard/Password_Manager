@@ -7,6 +7,7 @@ A cross-platform vault that stores, audits, and rotates secrets entirely on your
 - **End-to-end encryption** with Fernet (AES-128 + HMAC) backed by PBKDF2-derived master keys and optional Argon2id/scrypt migration hooks.
 - **Dual interfaces**: interactive terminal workflow (`password-manager`) and a full desktop client (`password-manager-gui`).
 - **Security automation** including strength analysis, breach checks, duplicate detection, expirations, and actionable remediation guidance.
+- **Password history** tracking all password changes with rotation metadata (manual, expiry, breach, strength), configurable retention, and detailed audit trails.
 - **Backup, restore, and export** pipelines with integrity protection, versioned envelopes, and disaster-recovery tooling.
 - **Two-factor authentication (TOTP)** with automatic clipboard clearing (configurable timeout, default 25 seconds) and planned OS-keyring / hardware token support.
 - **Extensible architecture** intended for browser auto-fill bridges, background jobs, and plugin-defined workflows.

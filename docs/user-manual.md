@@ -34,8 +34,9 @@ password-manager
 | --- | --- | --- |
 | Add password | `1. Password Vault > 1. Add Password` | Supports random generation, categories, optional expiry date. |
 | View passwords | `1. Password Vault > 2. View Passwords` | Filter by favorites, weak, reused, expiring. |
-| Edit/delete | `1. Password Vault > 3/4` | Editing re-encrypts instantly; deletions require confirmation. |
+| Edit/delete | `1. Password Vault > 3/4` | Editing re-encrypts instantly; deletions require confirmation. Editing prompts for rotation reason. |
 | Copy password | `1. Password Vault > 2. View Passwords > Select entry > c` | Copies to clipboard with automatic clearing after configured timeout (default: 25 seconds). |
+| View history | CLI/GUI context menu or options | Shows all password changes with timestamps, reasons, and who made changes. |
 | Security audit | `2. Security Center` | Runs multiple checks; results summarized with remediation tips. |
 | Backup/restore | `3. Backup & Restore` | Full backups produce zip archives; exports produce encrypted `.dat` files. |
 | Settings | `4. Settings` | Manage categories, key mode, KDF benchmarking, Browser Bridge, and security preferences. |

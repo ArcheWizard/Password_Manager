@@ -13,7 +13,7 @@ This guide defines how Secure Password Manager is verified. It covers test layer
 
 | Layer | Location | Purpose | Status |
 | --- | --- | --- | --- |
-| Unit | `tests/test_*.py` | Validate functions in isolation (crypto, database, password analysis, key management). | ✅ Implemented |
+| Unit | `tests/test_*.py` | Validate functions in isolation (crypto, database, password analysis, key management, password history). | ✅ Implemented |
 | Integration | `tests/test_integration.py` | Exercise real database + crypto files in temp directories. | ✅ Implemented |
 | Browser Bridge | `tests/test_browser_bridge.py` | Token store persistence, validation, and expiration. | ✅ Implemented |
 | Advanced Crypto | `tests/test_crypto_advanced.py` | KDF versioning, envelope encryption, HMAC verification. | ✅ Implemented |
