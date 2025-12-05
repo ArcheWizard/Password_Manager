@@ -10,14 +10,19 @@ Procedures for keeping Secure Password Manager healthy in production or enterpri
 
 ## Runtime Artifacts
 
-| Path | Description |
-| --- | --- |
-| `passwords.db` | Encrypted SQLite database. |
-| `secret.key`, `crypto.salt`, `auth.json` | Key material and authentication metadata. |
-| `totp_config.json` | Encrypted TOTP configuration (if enabled). |
-| `logs/password_manager.log` | Application log. |
-| `breach_cache.json` | Cached responses from breach lookups. |
-| `browser_bridge_tokens.json` | Token store for paired browser extensions (created when Browser Bridge is enabled). |
+Files follow XDG Base Directory specification. In development mode, all files are in `.data/`; in production, files are split across data/config/cache directories.
+
+| File | Location Type | Description |
+| --- | --- | --- |
+| `passwords.db` | Data | Encrypted SQLite database. |
+| `secret.key` | Data | Encrypted master key (only in file-key mode). |
+| `crypto.salt` | Data | KDF salt and parameters (JSON). |
+| `auth.json` | Data | Master password hash and authentication metadata. |
+| `totp_config.json` | Data | TOTP configuration (if 2FA enabled). |
+| `settings.json` | Config | User preferences and feature toggles. |
+| `logs/password_manager.log` | Data/logs | Application log with rotation. |
+| `breach_cache.json` | Cache | Cached HIBP prefix responses. |
+| `browser_bridge_tokens.json` | Data | Token store for paired browser extensions. |
 
 ## Routine Tasks
 

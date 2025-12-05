@@ -18,15 +18,17 @@ Browser Extension  <-->  Local RPC Service (127.0.0.1:43110)  <-->  Core Service
 - Extensions authenticate once per session using a pairing code displayed in the desktop app.
 - Tokens expire quickly and are scoped per browser profile.
 
-### Implementation Status (v0)
+### Implementation Status (v1.8.4)
 
 - `secure_password_manager/services/browser_bridge.py` hosts a FastAPI/uvicorn server embedded in the desktop app.
 - The service is disabled by default; enable it via CLI `Settings > Browser Bridge` or via the GUI Settings tab.
 - When enabled, the service auto-starts with the CLI/GUI process and shuts down automatically when the app exits.
-- Pairing codes are six digits and expire after `pairing_window_seconds` (default 120s).
-- Issued tokens are persisted to `browser_bridge_tokens.json` inside the config directory and can be revoked from either interface.
+- Pairing codes are six digits, randomly generated, and expire after `pairing_window_seconds` (configurable, default 120s).
+- Issued tokens are persisted to `browser_bridge_tokens.json` inside the data directory and can be revoked from either interface.
+- Token TTL is configurable via `browser_bridge.token_ttl_hours` in settings (default 24 hours).
 - Implemented endpoints: `/v1/status`, `/v1/pair`, `/v1/credentials/query`, `/v1/credentials/store`, `/v1/audit/report`, `/v1/clipboard/clear`.
-- Upcoming work: desktop approval prompts, encrypted payload negotiation, TLS and domain-socket transports.
+- All endpoints except `/v1/status` and `/v1/pair` require bearer token authentication.
+- Upcoming work: browser extension implementation, desktop approval prompts, encrypted payload negotiation, TLS and domain-socket transports.
 
 ## Transport & Protocol
 

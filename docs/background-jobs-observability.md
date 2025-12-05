@@ -2,6 +2,8 @@
 
 Blueprint for scheduled tasks, telemetry, and diagnostics in Secure Password Manager.
 
+**Implementation Status**: This document outlines planned features for v1.9+. As of v1.8.4, background job scheduling is not yet implemented; the application focuses on interactive CLI/GUI workflows.
+
 ## Objectives
 
 - Automate maintenance (breach cache refresh, rotation reminders, backup verification).

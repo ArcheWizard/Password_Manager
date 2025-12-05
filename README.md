@@ -10,8 +10,8 @@ A cross-platform vault that stores, audits, and rotates secrets entirely on your
 - **Backup, restore, and export** pipelines with integrity protection, versioned envelopes, and disaster-recovery tooling.
 - **Two-factor authentication (TOTP)**, clipboard hygiene controls, and planned OS-keyring / hardware token support.
 - **Extensible architecture** intended for browser auto-fill bridges, background jobs, and plugin-defined workflows.
-- **Experimental browser bridge** powered by FastAPI + uvicorn, issuing short-lived tokens to paired browser extensions over a localhost RPC channel.
-- **Flexible key management** with a switchable master-password-derived mode, file-key fallback, and an interactive PBKDF2 benchmarking wizard that tunes iterations and salt size per device.
+- **Experimental browser bridge** powered by FastAPI + uvicorn, issuing short-lived tokens to paired browser extensions over a localhost RPC channel (v1.8.4 - service implemented, browser extensions in development).
+- **Flexible key management** with a switchable master-password-derived mode, file-key fallback, and an interactive PBKDF2 benchmarking wizard that tunes iterations (default 390,000) and salt size per device.
 
 ## Quickstart
 
@@ -31,7 +31,7 @@ password-manager
 password-manager-gui
 ```
 
-> **Tip:** The first run generates `passwords.db`, `secret.key`, `crypto.salt`, `auth.json`, and (if configured) `totp_config.json` in the working directory. Keep these files private and back them up using the provided tooling.
+> **Tip:** The first run generates a `.data/` directory (in development mode) or uses XDG directories (when installed) containing `passwords.db`, `secret.key`, `crypto.salt`, `auth.json`, and (if configured) `totp_config.json`. Keep these files private and back them up using the provided tooling.
 
 ## Key Management & KDF Tuning
 

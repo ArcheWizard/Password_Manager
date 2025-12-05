@@ -11,13 +11,15 @@ This guide defines how Secure Password Manager is verified. It covers test layer
 
 ## Test Inventory
 
-| Layer | Location | Purpose |
-| --- | --- | --- |
-| Unit | `tests/test_*.py` | Validate functions in isolation (crypto, database, password analysis). |
-| Integration | `tests/test_integration.py` | Exercise real database + crypto files in temp directories. |
-| Property-based (planned) | `tests/property/test_crypto_props.py` | Randomized inputs for crypto and database operations. |
-| GUI smoke (planned) | `tests/gui/test_main_window.py` | Use `pytest-qt` to ensure dialogs load, actions wire correctly. |
-| End-to-end scripts | `scripts/initialize.py --demo` + manual checks | Validate packaging, CLI/GUI parity. |
+| Layer | Location | Purpose | Status |
+| --- | --- | --- | --- |
+| Unit | `tests/test_*.py` | Validate functions in isolation (crypto, database, password analysis, key management). | ✅ Implemented |
+| Integration | `tests/test_integration.py` | Exercise real database + crypto files in temp directories. | ✅ Implemented |
+| Browser Bridge | `tests/test_browser_bridge.py` | Token store persistence, validation, and expiration. | ✅ Implemented |
+| Advanced Crypto | `tests/test_crypto_advanced.py` | KDF versioning, envelope encryption, HMAC verification. | ✅ Implemented |
+| Property-based (planned) | `tests/property/test_crypto_props.py` | Randomized inputs for crypto and database operations. | ❌ Planned |
+| GUI smoke (planned) | `tests/gui/test_main_window.py` | Use `pytest-qt` to ensure dialogs load, actions wire correctly. | ❌ Planned |
+| End-to-end scripts | `scripts/initialize.py --demo` + manual checks | Validate packaging, CLI/GUI parity. | 🔵 Partial |
 
 ## Tooling
 

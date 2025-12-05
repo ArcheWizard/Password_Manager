@@ -8,9 +8,10 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
   - ✅ Offer master-password-derived mode (no `secret.key`) with CLI/GUI switching and full vault re-encryption.
   - ✅ Surface KDF tuning UI (iterations, salt size benchmarking wizard) across both interfaces.
 - **Browser Extension Bridge**
-  - Ship local RPC service + Chromium extension prototype.
-  - Implement pairing flow, scoped tokens, origin-based consent prompts.
-  - ✅ FastAPI-based local service with pairing codes, CLI/GUI toggles, and token persistence (extension prototype next).
+  - ✅ FastAPI-based local RPC service with pairing codes, CLI/GUI toggles, and token persistence.
+  - Ship Chromium/Firefox extension prototype with auto-fill and credential saving.
+  - Implement desktop approval prompts for credential access.
+  - Add TLS support with certificate pinning for localhost connections.
 - **UX Enhancements**
   - Clipboard auto-clear timers across CLI/GUI.
   - Password history with rotation metadata.

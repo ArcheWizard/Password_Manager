@@ -23,9 +23,7 @@ This document defines the structure of the vault database, supporting configurat
 | `created_at` | INTEGER | Unix timestamp (seconds). |
 | `updated_at` | INTEGER | Last modification timestamp. |
 | `expiry_date` | INTEGER NULL | Optional timestamp for rotation reminders. |
-| `is_favorite` | INTEGER DEFAULT 0 | Boolean flag (0/1). |
-| `strength_score` | INTEGER | Cached score (0–100). |
-| `breach_count` | INTEGER DEFAULT 0 | Number of breaches detected (cached). |
+| `favorite` | INTEGER DEFAULT 0 | Boolean flag (0/1). |
 
 ### categories
 
@@ -50,27 +48,37 @@ This document defines the structure of the vault database, supporting configurat
 
 ## Configuration & Secret Files
 
-| File | Purpose | Notes |
-| --- | --- | --- |
-| `secret.key` | Encrypted data-encryption-key (DEK). | Wrapped by KEK derived from master password. |
-| `crypto.salt` | Salt for PBKDF2/Argon2id. | Stored as JSON with metadata (`iteration`, `salt`, `kdf_version`). |
-| `auth.json` | Master password hash + settings. | Contains PBKDF2 parameters, 2FA flags, lockout counters. |
-| `totp_config.json` | TOTP shared secret + metadata. | AES-encrypted blob keyed by KEK. |
-| `breach_cache.json` | SHA-1 prefix cache for breach lookups. | Stores prefix -> max breach count, last_updated. |
-| `settings.json` (planned) | UI/security preferences. | Helps sync CLI/GUI options. |
+Files are stored following XDG Base Directory specification:
+
+- **Data directory** (`~/.local/share/secure-password-manager/` or `.data/` in dev mode)
+- **Config directory** (`~/.config/secure-password-manager/` or `.data/` in dev mode)
+- **Cache directory** (`~/.cache/secure-password-manager/` or `.data/` in dev mode)
+
+| File | Location | Purpose | Notes |
+| --- | --- | --- | --- |
+| `secret.key` | Data | Encrypted data-encryption-key (DEK). | Wrapped by KEK derived from master password. Removed in password-derived mode. |
+| `crypto.salt` | Data | Salt for PBKDF2. | Stored as JSON with metadata (`iterations`, `salt`, `kdf_version`, `updated_at`). |
+| `auth.json` | Data | Master password hash + settings. | Contains PBKDF2 parameters, 2FA flags, lockout counters. |
+| `totp_config.json` | Data | TOTP shared secret + metadata. | JSON with secret, created_at, account_name. |
+| `breach_cache.json` | Cache | SHA-1 prefix cache for breach lookups. | Stores prefix -> max breach count, last_updated. |
+| `settings.json` | Config | UI/security preferences. | Nested dictionary with key_management, clipboard, and browser_bridge settings. |
+| `browser_bridge_tokens.json` | Data | Browser extension tokens. | Token store with fingerprints, expiry times, and metadata. |
 
 ## Backup Formats
 
 ### Full Backup (zip)
 
+Created in the backup directory (`~/.local/share/secure-password-manager/backups/` or `.data/backups/` in dev mode):
+
 ```text
 backup_YYYYMMDD_HHMMSS.zip
 ├── passwords.db
-├── secret.key
+├── secret.key (if in file-key mode)
 ├── crypto.salt
 ├── auth.json
-├── totp_config.json (optional)
+├── totp_config.json (if 2FA enabled)
 ├── breach_cache.json
+├── settings.json
 ├── logs/password_manager.log (optional)
 └── manifest.json
 ```

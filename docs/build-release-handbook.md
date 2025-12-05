@@ -6,7 +6,8 @@ Authoritative instructions for producing, verifying, and shipping Secure Passwor
 
 - Target: quarterly feature releases, monthly maintenance updates as needed.
 - Versioning: semantic (`MAJOR.MINOR.PATCH`).
-- Source of truth: `VERSION.txt` (mirrored in `pyproject.toml`).
+- Current version: 1.8.4
+- Source of truth: `VERSION.txt` (mirrored in `pyproject.toml` and `__init__.py`).
 
 ## Pre-Release Checklist
 
@@ -23,6 +24,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip build twine pyinstaller
 ```
+
+Requires Python 3.8 or newer. Verify with `python --version`.
 
 ## Building Python Packages
 

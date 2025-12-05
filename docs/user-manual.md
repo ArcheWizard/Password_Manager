@@ -12,8 +12,10 @@ This manual covers everyday workflows for individuals and teams operating Secure
 
 - **Vault**: The encrypted SQLite database (`passwords.db`).
 - **Master Password**: Primary secret unlocking the vault.
-- **Entry**: A row containing website/app identifier, username, password, notes, category, and metadata.
+- **Entry**: A row containing website/app identifier, username, password, notes, category, and metadata (created_at, updated_at, expiry_date, favorite).
 - **Security Audit**: Automated analysis detecting weak, reused, expired, or breached passwords.
+- **Browser Bridge**: Local FastAPI service (v1.8.4) that enables browser extension integration via token-based authentication.
+- **Key Mode**: File-key (default, uses `secret.key`) or password-derived (regenerates key from master password on each unlock).
 
 ## CLI Workflow (`password-manager`)
 
@@ -53,7 +55,7 @@ password-manager
 - **Enable/disable**: CLI `Settings > Browser Bridge` or GUI `Settings` tab → "Browser Bridge" panel. The toggle controls whether the FastAPI service starts automatically on launch.
 - **Start/stop service**: Both interfaces expose a dedicated button; the service binds to `http://127.0.0.1:43110` by default (configurable in `settings.json`).
 - **Pair extensions**: Generate a 6-digit pairing code from the same menu. Codes expire after two minutes; share them directly with the requesting extension prompt.
-- **Token management**: View or revoke issued tokens at any time. Tokens are stored in `browser_bridge_tokens.json` under the config directory, and revocation immediately severs the extension’s access.
+- **Token management**: View or revoke issued tokens at any time. Tokens are stored in `browser_bridge_tokens.json` under the data directory, and revocation immediately severs the extension's access.
 - **Security reminder**: The service only listens on localhost, but you should stop or disable it when not using browser automation.
 
 ## Key Management & KDF Tuning

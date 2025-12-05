@@ -27,7 +27,7 @@ This document describes the security goals, threat model, cryptographic design, 
 
 ## Cryptography
 
-- **Key Derivation**: PBKDF2-HMAC-SHA256 with user-tunable iterations and salt size. A built-in benchmarking wizard (CLI/GUI) measures device throughput, recommends iteration counts meeting a target unlock time, and rehashes both `auth.json` and the encryption salt metadata so changes take effect immediately. Roadmap includes Argon2id and scrypt.
+- **Key Derivation**: PBKDF2-HMAC-SHA256 with user-tunable iterations (default 390,000) and salt size (default 16 bytes). A built-in benchmarking wizard (CLI/GUI) measures device throughput, recommends iteration counts meeting a target unlock time (default 350ms), and rehashes both `auth.json` and the encryption salt metadata so changes take effect immediately. The system supports versioned KDF parameters for future migration to Argon2id and scrypt.
 - **Master Key Storage**: `secret.key` encrypted by a Key Encryption Key (KEK) derived from the master password. Users can switch to a master-password-derived mode that removes `secret.key` entirely and recreates the vault key on each unlock; the mode switcher re-encrypts all vault entries atomically.
 - **Data Encryption**: Fernet tokens (AES-128-CBC + HMAC-SHA256) per password entry.
 - **Integrity**: Export files contain versioned metadata plus HMAC over ciphertext.

@@ -4,7 +4,7 @@ This guide walks through installing Secure Password Manager, initializing a vaul
 
 ## Prerequisites
 
-- Python 3.9 or newer
+- Python 3.8 or newer
 - Git (for source checkouts)
 - Build tools for PyQt5 (`qtbase5-dev`, `libxcb`, etc. on Linux; Xcode Command Line Tools on macOS; Visual Studio Build Tools on Windows)
 - `pip` and `virtualenv`
@@ -77,14 +77,27 @@ This guide walks through installing Secure Password Manager, initializing a vaul
 
 ## Directory Layout After Setup
 
+In development mode (when running from source):
+
 ```text
 password-manager/
-├── passwords.db
-├── secret.key
-├── crypto.salt
-├── auth.json
-├── logs/
-└── exports/
+└── .data/
+    ├── passwords.db
+    ├── secret.key
+    ├── crypto.salt
+    ├── auth.json
+    ├── totp_config.json (if 2FA enabled)
+    ├── browser_bridge_tokens.json (if Browser Bridge enabled)
+    └── logs/
+        └── password_manager.log
+```
+
+In production mode (installed via pip):
+
+```text
+~/.local/share/secure-password-manager/  # Data files
+~/.config/secure-password-manager/        # Configuration (settings.json)
+~/.cache/secure-password-manager/         # Cache (breach_cache.json)
 ```
 
 ## Troubleshooting

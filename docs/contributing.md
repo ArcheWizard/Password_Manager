@@ -22,7 +22,7 @@ Contributors are expected to treat others with respect, offer constructive feedb
 
 ## Coding Standards
 
-- Follow Python 3.11+ syntax where feasible while keeping compatibility with the minimum supported version.
+- Follow Python 3.8+ syntax where feasible while keeping compatibility with the minimum supported version (3.8).
 - Run `ruff`, `black`, and `isort` on touched files.
 - Prefer dependency injection for services (database, crypto) to simplify testing.
 - Keep UI layers thin; add shared logic to `utils/` modules.

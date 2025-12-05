@@ -12,13 +12,14 @@ This reference explains how Secure Password Manager is assembled, including runt
            |                                  |
            v                                  v
       +----+----------------------------------+----+
-      |         Application Services (utils)       |
-      | auth • crypto • database • password_* •    |
-      | security_* • backup • logger • ui helpers  |
+      |         Application Services               |
+      |  utils/ (auth, crypto, database, etc.)     |
+      |  services/ (browser_bridge)                |
       +----+----------------------+----------------+
-           |                      |
-           v                      v
-    SQLite (passwords.db)   Secrets (secret.key, auth.json, ...)
+           |                      |                |
+           v                      v                v
+    SQLite DB          Key Material       Browser Bridge
+  (passwords.db)    (secret.key, etc.)   (FastAPI/uvicorn)
 ```
 
 ## Modules & Responsibilities
@@ -28,22 +29,26 @@ This reference explains how Secure Password Manager is assembled, including runt
 | CLI App | `src/secure_password_manager/apps/app.py` | Text menus, workflow orchestration, ANSI formatting. |
 | GUI App | `src/secure_password_manager/apps/gui.py` | PyQt5 interface, dialogs, tables, notifications. |
 | Authentication | `src/secure_password_manager/utils/auth.py` | Master password setup/verification, login rate limiting. |
-| Crypto | `src/secure_password_manager/utils/crypto.py` | Key generation, Fernet encryption/decryption, key rotation helpers. |
+| Crypto | `src/secure_password_manager/utils/crypto.py` | Key generation, Fernet encryption/decryption, PBKDF2 derivation, key protection. |
+| Key Management | `src/secure_password_manager/utils/key_management.py` | Mode switching (file-key ⇌ password-derived), KDF benchmarking, parameter tuning. |
 | Database | `src/secure_password_manager/utils/database.py` | Schema creation, CRUD helpers, query utilities (favorites, expiring, search). |
 | Password Analysis | `src/secure_password_manager/utils/password_analysis.py` | Strength scoring, entropy, generator logic. |
 | Security Audit | `src/secure_password_manager/utils/security_audit.py` & `security_analyzer.py` | Weak/reused/expired/breached detection, scoring. |
 | Two-Factor | `src/secure_password_manager/utils/two_factor.py` | TOTP enrollment/verification, QR provisioning. |
 | Backup | `src/secure_password_manager/utils/backup.py` | Full backups, encrypted exports, restore routines. |
 | Logger | `src/secure_password_manager/utils/logger.py` | Structured logging, log rotation, CLI/GUI friendly formatting. |
+| Paths | `src/secure_password_manager/utils/paths.py` | XDG Base Directory support, file path resolution, dev vs. production modes. |
 | UI Helpers | `src/secure_password_manager/utils/ui.py`, `interactive.py` | Reusable menu prompts, table renderers, clipboard helpers. |
-| Browser Bridge Service | `src/secure_password_manager/services/browser_bridge.py` | FastAPI/uvicorn server issuing pairing codes and scoped tokens for browser extensions. |
+| Browser Bridge Service | `src/secure_password_manager/services/browser_bridge.py` | FastAPI/uvicorn server issuing pairing codes and scoped tokens for browser extensions (v1.8.4). |
 
 ## Data Flow
 
 1. **Startup**
    - CLI/GUI prompts for master password.
-   - `auth.verify_master_password` validates hash stored in `auth.json`.
-   - `crypto.load_key` decrypts `secret.key` using KEK derived from master password.
+   - `auth.authenticate` validates hash stored in `auth.json` (PBKDF2-HMAC-SHA256).
+   - In file-key mode: `crypto.unprotect_key` decrypts `secret.key` using KEK derived from master password.
+   - In password-derived mode: `crypto.derive_key_from_password` regenerates vault key from master password on each unlock.
+   - `crypto.set_master_password_context` stores password in memory for the session.
 2. **Database Access**
    - Services call `database.get_connection()` (context-managed) to run queries.
    - Results are mapped into domain objects or dictionaries for UI layers.
@@ -64,7 +69,7 @@ This reference explains how Secure Password Manager is assembled, including runt
 
 ## Extension Points
 
-1. **Browser Bridge**: Local RPC server (planned) will reuse authentication, crypto, and audit services. See `browser-extension-ipc.md`.
+1. **Browser Bridge**: Local RPC server is implemented (v1.8.4). FastAPI service reuses authentication, crypto, and audit services. Browser extensions are in development. See `browser-extension-ipc.md`.
 2. **Background Jobs**: Scheduler/worker design will call into database/audit helpers; architecture is outlined in `background-jobs-observability.md`.
 3. **Plugin API**: Future entry points will expose hooks for custom breach providers or policy engines via Python entry points.
 
@@ -76,8 +81,9 @@ This reference explains how Secure Password Manager is assembled, including runt
 
 ## Known Technical Debt
 
-- `apps/app.py` and `apps/gui.py` exceed 1,000 lines; refactoring into feature modules is planned.
+- `apps/app.py` (1,600+ lines) and `apps/gui.py` (2,400+ lines) contain monolithic implementations; refactoring into feature modules is planned.
 - Database migrations are manual; a schema version table plus migrator utility is on the roadmap.
+- Config management uses a simple JSON file; consider a more robust solution for complex enterprise deployments.
 - Tests cover critical utilities but need expansion to cover GUI presenters and error paths.
 
 ## Future State Snapshot
