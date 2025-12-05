@@ -37,6 +37,7 @@ This reference explains how Secure Password Manager is assembled, including runt
 | Two-Factor | `src/secure_password_manager/utils/two_factor.py` | TOTP enrollment/verification, QR provisioning. |
 | Backup | `src/secure_password_manager/utils/backup.py` | Full backups, encrypted exports, restore routines. |
 | Logger | `src/secure_password_manager/utils/logger.py` | Structured logging, log rotation, CLI/GUI friendly formatting. |
+| Clipboard Manager | `src/secure_password_manager/utils/clipboard_manager.py` | Secure clipboard operations with automatic clearing via background timers. |
 | Paths | `src/secure_password_manager/utils/paths.py` | XDG Base Directory support, file path resolution, dev vs. production modes. |
 | UI Helpers | `src/secure_password_manager/utils/ui.py`, `interactive.py` | Reusable menu prompts, table renderers, clipboard helpers. |
 | Browser Bridge Service | `src/secure_password_manager/services/browser_bridge.py` | FastAPI/uvicorn server issuing pairing codes and scoped tokens for browser extensions (v1.8.4). |

@@ -42,8 +42,10 @@ This document describes the security goals, threat model, cryptographic design, 
 
 ## Clipboard & UI Protections
 
-- Passwords copied via CLI/GUI trigger timers that wipe the clipboard using OS-specific commands.
-- GUI uses masked fields by default; unmasking requires holding a modifier key.
+- Passwords copied via CLI/GUI trigger automatic clearing timers (default 25 seconds, user-configurable) that wipe the clipboard using a background thread.
+- The clipboard manager cancels previous timers when new content is copied, ensuring only the most recent timer is active.
+- Users can immediately clear the clipboard or disable auto-clear per operation.
+- GUI uses masked fields by default; unmasking requires explicit action.
 - Keyboard shortcuts avoid logging sensitive data.
 
 ## Network Interactions

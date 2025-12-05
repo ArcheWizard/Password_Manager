@@ -76,6 +76,7 @@ from secure_password_manager.utils.paths import (
     get_secret_key_enc_path,
     get_secret_key_path,
 )
+from secure_password_manager.utils.clipboard_manager import copy_to_clipboard
 from secure_password_manager.utils.two_factor import (
     disable_2fa,
     is_2fa_enabled,
@@ -739,8 +740,8 @@ class PasswordManagerApp(QMainWindow):
             QtCoreQt.ItemDataRole.UserRole
         )  # Get the stored password
 
-        pyperclip.copy(password)
-        self.statusBar().showMessage("Password copied to clipboard", 2000)
+        copy_to_clipboard(password)
+        self.statusBar().showMessage("Password copied to clipboard (auto-clear enabled)", 3000)
 
         if auto_close:
             auto_close.close()

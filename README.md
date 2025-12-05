@@ -8,7 +8,7 @@ A cross-platform vault that stores, audits, and rotates secrets entirely on your
 - **Dual interfaces**: interactive terminal workflow (`password-manager`) and a full desktop client (`password-manager-gui`).
 - **Security automation** including strength analysis, breach checks, duplicate detection, expirations, and actionable remediation guidance.
 - **Backup, restore, and export** pipelines with integrity protection, versioned envelopes, and disaster-recovery tooling.
-- **Two-factor authentication (TOTP)**, clipboard hygiene controls, and planned OS-keyring / hardware token support.
+- **Two-factor authentication (TOTP)** with automatic clipboard clearing (configurable timeout, default 25 seconds) and planned OS-keyring / hardware token support.
 - **Extensible architecture** intended for browser auto-fill bridges, background jobs, and plugin-defined workflows.
 - **Experimental browser bridge** powered by FastAPI + uvicorn, issuing short-lived tokens to paired browser extensions over a localhost RPC channel (v1.8.4 - service implemented, browser extensions in development).
 - **Flexible key management** with a switchable master-password-derived mode, file-key fallback, and an interactive PBKDF2 benchmarking wizard that tunes iterations (default 390,000) and salt size per device.

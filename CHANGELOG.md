@@ -2,7 +2,27 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
-## [1.8.4] - 2025-11-18
+## [1.8.5] - 2024-12-05
+
+### Added
+
+- Clipboard auto-clear feature with configurable timeout (default 25 seconds) for both CLI and GUI.
+- New `clipboard_manager.py` module providing thread-safe clipboard operations with automatic clearing.
+- Comprehensive test suite for clipboard manager functionality.
+
+### Changed
+
+- All clipboard copy operations now use the centralized clipboard manager.
+- Status messages updated to indicate auto-clear is enabled.
+- Security whitepaper updated with detailed clipboard protection mechanisms.
+
+### Fixed
+
+- N/A
+
+---
+
+## [1.8.4] - 2024-11-18
 
 ### Added
 

@@ -74,6 +74,7 @@ from secure_password_manager.utils.paths import (
     get_secret_key_enc_path,
     get_secret_key_path,
 )
+from secure_password_manager.utils.clipboard_manager import copy_to_clipboard
 
 # Initialize Colorama
 init(autoreset=True)
@@ -147,8 +148,8 @@ def add_new_password() -> None:
 
         # Copy to clipboard
         if input("Copy to clipboard? (y/n): ").lower() == "y":
-            pyperclip.copy(password)
-            print_success("Password copied to clipboard")
+            copy_to_clipboard(password)
+            print_success("Password copied to clipboard (auto-clear enabled)")
     else:
         password = input("Password: ")
         score, strength = evaluate_password_strength(password)
@@ -305,8 +306,8 @@ def view_passwords(
             pass_id = int(pass_id)
             for entry in rows:
                 if entry[0] == pass_id:
-                    pyperclip.copy(entry[3])
-                    print_success("Password copied to clipboard")
+                    copy_to_clipboard(entry[3])
+                    print_success("Password copied to clipboard (auto-clear enabled)")
                     log_info(f"Copied password for ID {pass_id}")
                     break
             else:
@@ -440,8 +441,8 @@ def edit_password() -> None:
 
                 # Copy to clipboard
                 if input("Copy to clipboard? (y/n): ").lower() == "y":
-                    pyperclip.copy(new_password)
-                    print_success("Password copied to clipboard")
+                    copy_to_clipboard(new_password)
+                    print_success("Password copied to clipboard (auto-clear enabled)")
             else:
                 new_password = input("New password: ")
                 score, strength = evaluate_password_strength(new_password)
@@ -578,8 +579,8 @@ def generate_password_tool() -> None:
 
     # Copy to clipboard
     if input("Copy to clipboard? (y/n): ").lower() == "y":
-        pyperclip.copy(password)
-        print_success("Password copied to clipboard")
+        copy_to_clipboard(password)
+        print_success("Password copied to clipboard (auto-clear enabled)")
 
 
 def check_expiring_passwords() -> None:
