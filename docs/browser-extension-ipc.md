@@ -18,7 +18,7 @@ Browser Extension  <-->  Local RPC Service (127.0.0.1:43110)  <-->  Core Service
 - Extensions authenticate once per session using a pairing code displayed in the desktop app.
 - Tokens expire quickly and are scoped per browser profile.
 
-### Implementation Status (v1.8.4)
+### Implementation Status (v1.9.1)
 
 - `secure_password_manager/services/browser_bridge.py` hosts a FastAPI/uvicorn server embedded in the desktop app.
 - The service is disabled by default; enable it via CLI `Settings > Browser Bridge` or via the GUI Settings tab.
@@ -28,7 +28,10 @@ Browser Extension  <-->  Local RPC Service (127.0.0.1:43110)  <-->  Core Service
 - Token TTL is configurable via `browser_bridge.token_ttl_hours` in settings (default 24 hours).
 - Implemented endpoints: `/v1/status`, `/v1/pair`, `/v1/credentials/query`, `/v1/credentials/store`, `/v1/audit/report`, `/v1/clipboard/clear`.
 - All endpoints except `/v1/status` and `/v1/pair` require bearer token authentication.
-- Upcoming work: browser extension implementation, desktop approval prompts, encrypted payload negotiation, TLS and domain-socket transports.
+- **NEW (v1.9.1)**: Desktop approval prompts now protect credential access - users must explicitly approve each origin before credentials are returned.
+- **NEW (v1.9.1)**: "Remember this domain" feature allows users to auto-approve trusted origins for future requests.
+- **NEW (v1.9.1)**: Approval decisions are persisted in `approval_store.json` and can be managed from settings.
+- Upcoming work: browser extension implementation, encrypted payload negotiation, TLS and certificate pinning, domain-socket transports.
 
 ## Transport & Protocol
 
@@ -77,16 +80,20 @@ Response:
       "entry_id": "c8be...",
       "label": "Example Admin",
       "username": "alice",
-      "password": "base64(fernet ciphertext)",
-      "totp": "optional current code",
-      "requires_user_confirm": true
+      "password": "decrypted password",
+      "token_id": "fingerprint"
     }
   ]
 }
 ```
 
-- Passwords remain encrypted during transit. The extension derives the session key shared during pairing to decrypt.
-- If `requires_user_confirm` is true, the desktop app displays a prompt before releasing plaintext.
+**NEW (v1.9.1)**: Before returning credentials, the desktop app prompts the user for approval:
+
+- CLI mode displays an interactive prompt with origin, browser, and entry count details
+- GUI mode shows a modal dialog with approval/deny buttons and a "Remember this domain" checkbox
+- If the user approves, credentials are returned; if denied or timeout occurs, an empty response or error is returned
+- Remembered approvals are stored in `approval_store.json` and automatically approved for future requests
+- Approval decisions are logged in the audit trail with origin, browser, and decision details
 
 `POST /v1/credentials/store`
 
@@ -104,10 +111,12 @@ Desktop app decrypts payload, performs policy checks, and stores entry. Conflict
 
 ## Security Requirements
 
+- **User approval (v1.9.1)**: Every credential access request triggers a desktop approval prompt unless the origin is pre-approved.
+- **Remembered approvals**: Users can choose to remember approval decisions for trusted origins; stored in `approval_store.json`.
 - Tokens scoped by origin: extension must request site-specific approvals.
 - Rate limiting: max 5 credential pulls per second per origin.
-- Audit logging: every API call logged with token ID hash and action result.
-- User presence: optionally require desktop confirmation for high-risk domains.
+- Audit logging: every API call logged with token ID hash, action result, and approval decision.
+- User presence: desktop confirmation required for all credential access (auto-approved for remembered origins).
 
 ## Versioning & Compatibility
 

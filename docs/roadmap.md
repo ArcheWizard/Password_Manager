@@ -9,8 +9,8 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
   - ✅ Surface KDF tuning UI (iterations, salt size benchmarking wizard) across both interfaces.
 - **Browser Extension Bridge**
   - ✅ FastAPI-based local RPC service with pairing codes, CLI/GUI toggles, and token persistence.
+  - ✅ Desktop approval prompts for credential access with remember-this-domain functionality.
   - Ship Chromium/Firefox extension prototype with auto-fill and credential saving.
-  - Implement desktop approval prompts for credential access.
   - Add TLS support with certificate pinning for localhost connections.
 - **UX Enhancements**
   - ✅ Clipboard auto-clear timers across CLI/GUI.

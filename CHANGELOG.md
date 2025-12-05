@@ -2,6 +2,39 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [1.9.1] - 2024-12-05
+
+### Added
+
+- Desktop approval prompts for browser extension credential access requests.
+- Interactive CLI approval prompt with origin, browser, and entry details.
+- GUI modal approval dialog with approve/deny buttons and visual details.
+- "Remember this domain" feature for auto-approving trusted origins.
+- Persistent approval store (`approval_store.json`) for remembered decisions.
+- `ApprovalManager` system for thread-safe approval request handling.
+- Comprehensive test suite (17 tests) for approval system functionality.
+- Audit logging for all approval decisions (approve/deny/timeout).
+
+### Changed
+
+- Browser bridge `/v1/credentials/query` endpoint now requires user approval before returning credentials.
+- Approval prompts automatically triggered when browser extensions request credentials.
+- Remembered approvals bypass prompt and auto-approve subsequent requests.
+- Both CLI and GUI modes set up approval handlers on startup.
+
+### Security
+
+- Prevents rogue browser extensions from accessing credentials without explicit user consent.
+- Per-origin approval tracking with browser fingerprint validation.
+- Denial decisions can also be remembered to auto-reject malicious domains.
+- All credential access now requires explicit user confirmation (unless pre-approved).
+
+### Fixed
+
+- N/A
+
+---
+
 ## [1.9.0] - 2024-12-05
 
 ### Added

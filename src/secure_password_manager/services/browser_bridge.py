@@ -14,6 +14,10 @@ from pydantic import BaseModel
 import uvicorn
 
 from secure_password_manager.utils import config
+from secure_password_manager.utils.approval_manager import (
+    ApprovalDecision,
+    get_approval_manager,
+)
 from secure_password_manager.utils.crypto import decrypt_password
 from secure_password_manager.utils.database import get_passwords
 from secure_password_manager.utils.logger import log_info, log_warning
@@ -159,7 +163,10 @@ class BrowserBridgeService:
             token: Dict[str, Any] = Depends(require_token),
         ) -> Dict[str, Any]:
             origin = payload.origin.lower()
+
+            # First, collect matching entries
             entries = []
+            username_preview = None
             for entry in get_passwords():
                 (
                     _entry_id,
@@ -181,6 +188,8 @@ class BrowserBridgeService:
                 except Exception as exc:  # pragma: no cover - defensive
                     log_warning(f"Failed to decrypt entry for site {website}: {exc}")
                     continue
+
+                # Store for approval check
                 entries.append(
                     {
                         "website": website,
@@ -189,7 +198,41 @@ class BrowserBridgeService:
                         "token_id": token.get("fingerprint"),
                     }
                 )
-            return {"entries": entries}
+
+                # Save first username for preview
+                if username_preview is None:
+                    username_preview = username
+
+            # If no entries found, return empty (no approval needed)
+            if not entries:
+                return {"entries": []}
+
+            # Request approval from user
+            approval_manager = get_approval_manager()
+            response = approval_manager.request_approval(
+                origin=origin,
+                browser=token.get("browser", "unknown"),
+                fingerprint=token.get("fingerprint", "unknown"),
+                entry_count=len(entries),
+                username_preview=username_preview,
+            )
+
+            # Log the approval decision
+            log_info(
+                f"Credential access for {origin}: {response.decision.value} "
+                f"(remember={response.remember}, browser={token.get('browser')})"
+            )
+
+            # Return credentials only if approved
+            if response.decision == ApprovalDecision.APPROVED:
+                return {"entries": entries}
+            else:
+                # Denied or timed out
+                return {
+                    "entries": [],
+                    "error": "Access denied" if response.decision == ApprovalDecision.DENIED else "Request timed out",
+                }
+
 
         @app.post("/v1/credentials/store")
         async def credentials_store(

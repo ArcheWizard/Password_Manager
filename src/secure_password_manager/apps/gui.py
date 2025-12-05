@@ -2,6 +2,7 @@
 
 import sys
 import time
+from typing import Optional
 
 import pyperclip
 from PyQt5.QtCore import QSize
@@ -39,6 +40,12 @@ from PyQt5.QtWidgets import (
 
 from secure_password_manager.services.browser_bridge import get_browser_bridge_service
 from secure_password_manager.utils import config
+from secure_password_manager.utils.approval_manager import (
+    ApprovalDecision,
+    ApprovalRequest,
+    ApprovalResponse,
+    get_approval_manager,
+)
 from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import export_passwords, import_passwords
@@ -83,6 +90,148 @@ from secure_password_manager.utils.two_factor import (
     is_2fa_enabled,
     setup_totp,
 )
+
+
+class ApprovalDialog(QDialog):
+    """Dialog for browser extension credential access approval."""
+
+    def __init__(self, request: ApprovalRequest, parent=None):
+        super().__init__(parent)
+        self.request = request
+        self.response: Optional[ApprovalResponse] = None
+
+        self.setWindowTitle("🔐 Credential Access Request")
+        self.setModal(True)
+        self.setMinimumWidth(500)
+
+        layout = QVBoxLayout()
+
+        # Header
+        header = QLabel("<h2>Browser Extension Credential Request</h2>")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(header)
+
+        # Warning message
+        warning = QLabel(
+            "⚠️ A browser extension is requesting access to your stored credentials."
+        )
+        warning.setStyleSheet("color: #ff9800; font-weight: bold; padding: 10px;")
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+
+        # Request details
+        details_group = QGroupBox("Request Details")
+        details_layout = QFormLayout()
+
+        origin_label = QLabel(request.origin)
+        origin_label.setStyleSheet("font-weight: bold; color: #2196F3;")
+        details_layout.addRow("Origin:", origin_label)
+
+        browser_label = QLabel(request.browser)
+        details_layout.addRow("Browser:", browser_label)
+
+        entries_label = QLabel(f"{request.entry_count} credential(s)")
+        details_layout.addRow("Entries Found:", entries_label)
+
+        if request.username_preview:
+            username_label = QLabel(request.username_preview)
+            username_label.setStyleSheet("font-family: monospace;")
+            details_layout.addRow("Username:", username_label)
+
+        fingerprint_short = request.fingerprint[:16] + "..."
+        fingerprint_label = QLabel(fingerprint_short)
+        fingerprint_label.setStyleSheet("font-family: monospace; color: #666;")
+        fingerprint_label.setToolTip(request.fingerprint)
+        details_layout.addRow("Fingerprint:", fingerprint_label)
+
+        details_group.setLayout(details_layout)
+        layout.addWidget(details_group)
+
+        # Remember checkbox
+        self.remember_checkbox = QCheckBox("Remember my decision for this origin")
+        self.remember_checkbox.setToolTip(
+            "If checked, this origin will be automatically approved/denied in the future"
+        )
+        layout.addWidget(self.remember_checkbox)
+
+        # Security notice
+        notice = QLabel(
+            "<i>Only approve if you trust this website and initiated this action.</i>"
+        )
+        notice.setStyleSheet("color: #666; padding: 10px;")
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+
+        approve_btn = QPushButton("✓ Approve")
+        approve_btn.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;"
+        )
+        approve_btn.clicked.connect(self.approve)
+        button_layout.addWidget(approve_btn)
+
+        deny_btn = QPushButton("✗ Deny")
+        deny_btn.setStyleSheet(
+            "background-color: #f44336; color: white; font-weight: bold; padding: 10px;"
+        )
+        deny_btn.clicked.connect(self.deny)
+        button_layout.addWidget(deny_btn)
+
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+        # Auto-focus on deny button for security (requires explicit action)
+        deny_btn.setFocus()
+
+    def approve(self):
+        """Approve the credential access request."""
+        self.response = ApprovalResponse(
+            request_id=self.request.request_id,
+            decision=ApprovalDecision.APPROVED,
+            remember=self.remember_checkbox.isChecked(),
+        )
+        self.accept()
+
+    def deny(self):
+        """Deny the credential access request."""
+        self.response = ApprovalResponse(
+            request_id=self.request.request_id,
+            decision=ApprovalDecision.DENIED,
+            remember=self.remember_checkbox.isChecked(),
+        )
+        self.reject()
+
+
+def gui_approval_prompt(request: ApprovalRequest) -> ApprovalResponse:
+    """
+    Display a GUI approval dialog for browser extension credential access.
+
+    Args:
+        request: The approval request details
+
+    Returns:
+        ApprovalResponse with user's decision
+    """
+    # Create a temporary QApplication if one doesn't exist
+    # (shouldn't happen in normal GUI mode, but safe fallback)
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    dialog = ApprovalDialog(request)
+    dialog.exec_()
+
+    if dialog.response:
+        return dialog.response
+    else:
+        # User closed dialog without choosing - treat as denial
+        return ApprovalResponse(
+            request_id=request.request_id,
+            decision=ApprovalDecision.DENIED,
+            remember=False,
+        )
 
 
 class PasswordManagerApp(QMainWindow):
@@ -131,6 +280,10 @@ class PasswordManagerApp(QMainWindow):
         else:
             # Key is not protected, but we should still set context for potential protection later
             set_master_password_context(password)
+
+        # Set up approval prompt handler for browser bridge
+        approval_manager = get_approval_manager()
+        approval_manager.set_prompt_handler(gui_approval_prompt)
 
         self.browser_bridge_service = get_browser_bridge_service()
         self._bridge_pairing_message = "Pairing code not generated yet."

@@ -14,6 +14,12 @@ from secure_password_manager.services.browser_bridge import (
     get_browser_bridge_service,
 )
 from secure_password_manager.utils import config
+from secure_password_manager.utils.approval_manager import (
+    ApprovalDecision,
+    ApprovalRequest,
+    ApprovalResponse,
+    get_approval_manager,
+)
 from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import (
@@ -1632,6 +1638,73 @@ def login() -> bool:
     return False
 
 
+def cli_approval_prompt(request: ApprovalRequest) -> ApprovalResponse:
+    """
+    Display a CLI approval prompt for browser extension credential access.
+
+    Args:
+        request: The approval request details
+
+    Returns:
+        ApprovalResponse with user's decision
+    """
+    print("\n" + "=" * 70)
+    print(f"{Fore.YELLOW}{Style.BRIGHT}🔐 CREDENTIAL ACCESS REQUEST{Style.RESET_ALL}")
+    print("=" * 70)
+
+    print(f"\n{Fore.CYAN}Origin:{Style.RESET_ALL}     {request.origin}")
+    print(f"{Fore.CYAN}Browser:{Style.RESET_ALL}    {request.browser}")
+    print(f"{Fore.CYAN}Entries:{Style.RESET_ALL}    {request.entry_count} credential(s)")
+
+    if request.username_preview:
+        print(f"{Fore.CYAN}Username:{Style.RESET_ALL}   {request.username_preview}")
+
+    print(f"\n{Fore.WHITE}Browser fingerprint: {request.fingerprint[:16]}...{Style.RESET_ALL}")
+    print("\n" + "-" * 70)
+
+    while True:
+        print(f"\n{Fore.YELLOW}Choose an option:{Style.RESET_ALL}")
+        print(f"  {Fore.GREEN}[A]{Style.RESET_ALL} Approve this request")
+        print(f"  {Fore.RED}[D]{Style.RESET_ALL} Deny this request")
+        print(f"  {Fore.BLUE}[R]{Style.RESET_ALL} Remember and always approve this origin")
+        print(f"  {Fore.MAGENTA}[N]{Style.RESET_ALL} Remember and always deny this origin")
+
+        choice = input(f"\n{Fore.YELLOW}Your decision: {Style.RESET_ALL}").strip().upper()
+
+        if choice == 'A':
+            print(f"\n{Fore.GREEN}✓ Request approved{Style.RESET_ALL}")
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.APPROVED,
+                remember=False,
+            )
+        elif choice == 'D':
+            print(f"\n{Fore.RED}✗ Request denied{Style.RESET_ALL}")
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                remember=False,
+            )
+        elif choice == 'R':
+            print(f"\n{Fore.GREEN}✓ Request approved and remembered{Style.RESET_ALL}")
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.APPROVED,
+                remember=True,
+            )
+        elif choice == 'N':
+            print(f"\n{Fore.RED}✗ Request denied and remembered{Style.RESET_ALL}")
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                remember=True,
+            )
+        else:
+            print_error("Invalid choice. Please enter A, D, R, or N.")
+
+    print("=" * 70 + "\n")
+
+
 def main() -> int:
     """Main entry point for command line application."""
     init_db()
@@ -1648,6 +1721,10 @@ def main() -> int:
         if not authenticated:
             print_error("Too many failed attempts. Exiting.")
             return 1
+
+        # Set up approval prompt handler for browser bridge
+        approval_manager = get_approval_manager()
+        approval_manager.set_prompt_handler(cli_approval_prompt)
 
         sync_browser_bridge_with_settings()
 
