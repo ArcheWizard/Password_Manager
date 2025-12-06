@@ -10,7 +10,7 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
 - **Browser Extension Bridge**
   - ✅ FastAPI-based local RPC service with pairing codes, CLI/GUI toggles, and token persistence.
   - ✅ Desktop approval prompts for credential access with remember-this-domain functionality.
-  - Ship Chromium/Firefox extension prototype with auto-fill and credential saving.
+  - ✅ Ship Chromium/Firefox extension prototype with auto-fill and credential saving (v1.10.0).
   - Add TLS support with certificate pinning for localhost connections.
 - **UX Enhancements**
   - ✅ Clipboard auto-clear timers across CLI/GUI.

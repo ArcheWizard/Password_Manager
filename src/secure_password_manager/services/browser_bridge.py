@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware  # Add this import
 from pydantic import BaseModel
 import uvicorn
 
@@ -125,6 +126,16 @@ class BrowserBridgeService:
         app = FastAPI(title="Secure Password Manager Bridge", version="1.0")
         service = self
 
+        # Add CORS middleware to allow browser extension requests
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"^(chrome-extension|moz-extension)://.*$",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["*"],
+        )
+
         def require_token(authorization: str = Header(...)) -> Dict[str, Any]:
             if not authorization.startswith("Bearer "):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -167,6 +178,12 @@ class BrowserBridgeService:
             # First, collect matching entries
             entries = []
             username_preview = None
+
+            # Extract domain from origin for better matching
+            # e.g., "https://github.com" -> "github.com" -> "github"
+            origin_domain = origin.replace("https://", "").replace("http://", "").split("/")[0]
+            origin_name = origin_domain.split(".")[0] if "." in origin_domain else origin_domain
+
             for entry in get_passwords():
                 (
                     _entry_id,
@@ -181,17 +198,27 @@ class BrowserBridgeService:
                     _favorite,
                 ) = entry
                 site = (website or "").lower()
-                if origin not in site:
+                notes = (_notes or "").lower()
+
+                # Match if:
+                # 1. Origin is in website field (e.g., "https://github.com" in "https://github.com/login")
+                # 2. Origin domain is in website (e.g., "github.com" in "Github")
+                # 3. Origin name is in website (e.g., "github" matches "Github", "GitHub", etc.)
+                # 4. Origin or domain is in notes field
+                if not (origin in site or origin_domain in site or origin_name in site or
+                        origin in notes or origin_domain in notes):
                     continue
                 try:
                     password = decrypt_password(encrypted)
-                except Exception as exc:  # pragma: no cover - defensive
+                except Exception as exc:
                     log_warning(f"Failed to decrypt entry for site {website}: {exc}")
                     continue
 
                 # Store for approval check
                 entries.append(
                     {
+                        "entry_id": _entry_id,
+                        "label": website,
                         "website": website,
                         "username": username,
                         "password": password,
@@ -208,29 +235,36 @@ class BrowserBridgeService:
                 return {"entries": []}
 
             # Request approval from user
-            approval_manager = get_approval_manager()
-            response = approval_manager.request_approval(
-                origin=origin,
-                browser=token.get("browser", "unknown"),
-                fingerprint=token.get("fingerprint", "unknown"),
-                entry_count=len(entries),
-                username_preview=username_preview,
-            )
+            try:
+                approval_manager = get_approval_manager()
+                response = approval_manager.request_approval(
+                    origin=origin,
+                    browser=token.get("browser", "unknown"),
+                    fingerprint=token.get("fingerprint", "unknown"),
+                    entry_count=len(entries),
+                    username_preview=username_preview,
+                )
 
-            # Log the approval decision
-            log_info(
-                f"Credential access for {origin}: {response.decision.value} "
-                f"(remember={response.remember}, browser={token.get('browser')})"
-            )
+                # Log the approval decision
+                log_info(
+                    f"Credential access for {origin}: {response.decision.value} "
+                    f"(remember={response.remember}, browser={token.get('browser')})"
+                )
 
-            # Return credentials only if approved
-            if response.decision == ApprovalDecision.APPROVED:
-                return {"entries": entries}
-            else:
-                # Denied or timed out
+                # Return credentials only if approved
+                if response.decision == ApprovalDecision.APPROVED:
+                    return {"entries": entries}
+                else:
+                    # Denied or timed out
+                    return {
+                        "entries": [],
+                        "error": "Access denied" if response.decision == ApprovalDecision.DENIED else "Request timed out",
+                    }
+            except Exception as exc:
+                log_warning(f"Approval request failed: {exc}")
                 return {
                     "entries": [],
-                    "error": "Access denied" if response.decision == ApprovalDecision.DENIED else "Request timed out",
+                    "error": "Approval request failed"
                 }
 
 

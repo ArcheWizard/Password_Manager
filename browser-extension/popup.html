@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure Password Manager</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 350px;
+      min-height: 400px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .container {
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #4CAF50;
+    }
+
+    .header-icon {
+      width: 40px;
+      height: 40px;
+      margin-right: 12px;
+      background: #4CAF50;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .header-title {
+      flex: 1;
+    }
+
+    .header-title h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .header-title p {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .status {
+      margin-bottom: 20px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .status.connected {
+      background: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #4CAF50;
+    }
+
+    .status.disconnected {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #f44336;
+    }
+
+    .status.warning {
+      background: #fff3e0;
+      color: #e65100;
+      border: 1px solid #ff9800;
+    }
+
+    .status-icon {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .status.connected .status-icon {
+      background: #4CAF50;
+    }
+
+    .status.disconnected .status-icon {
+      background: #f44336;
+    }
+
+    .status.warning .status-icon {
+      background: #ff9800;
+    }
+
+    .pairing-section, .actions-section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: #555;
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: monospace;
+      letter-spacing: 2px;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button.primary {
+      background: #4CAF50;
+      color: white;
+    }
+
+    button.primary:hover {
+      background: #45a049;
+    }
+
+    button.secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    button.secondary:hover {
+      background: #e0e0e0;
+    }
+
+    button.danger {
+      background: #f44336;
+      color: white;
+    }
+
+    button.danger:hover {
+      background: #da190b;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .info {
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
+    .token-info {
+      background: #f5f5f5;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+
+    .token-info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .token-info-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .token-info-label {
+      color: #666;
+    }
+
+    .token-info-value {
+      color: #333;
+      font-weight: 500;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .footer {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #e0e0e0;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      font-size: 12px;
+    }
+
+    .footer-links a {
+      color: #4CAF50;
+      text-decoration: none;
+    }
+
+    .footer-links a:hover {
+      text-decoration: underline;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-icon">🔐</div>
+      <div class="header-title">
+        <h1>Secure Password Manager</h1>
+        <p>Browser Extension</p>
+      </div>
+    </div>
+
+    <div id="status" class="status disconnected">
+      <span class="status-icon"></span>
+      <span id="status-text">Checking connection...</span>
+    </div>
+
+    <!-- Pairing Section (shown when not paired) -->
+    <div id="pairing-section" class="pairing-section hidden">
+      <div class="section-title">Pair with Desktop App</div>
+      <div class="input-group">
+        <label for="pairing-code">Enter 6-digit pairing code</label>
+        <input type="text" id="pairing-code" placeholder="000000" maxlength="6" pattern="[0-9]{6}">
+      </div>
+      <button id="pair-btn" class="primary">
+        <span id="pair-btn-text">Pair Extension</span>
+      </button>
+      <p class="info">
+        Open the desktop app and navigate to Settings → Browser Bridge to generate a pairing code.
+      </p>
+    </div>
+
+    <!-- Connected Section (shown when paired) -->
+    <div id="connected-section" class="hidden">
+      <div class="token-info">
+        <div class="token-info-row">
+          <span class="token-info-label">Status:</span>
+          <span class="token-info-value" id="connection-status">Connected</span>
+        </div>
+        <div class="token-info-row">
+          <span class="token-info-label">Fingerprint:</span>
+          <span class="token-info-value" id="fingerprint-value">-</span>
+        </div>
+        <div class="token-info-row">
+          <span class="token-info-label">Expires:</span>
+          <span class="token-info-value" id="expires-value">-</span>
+        </div>
+      </div>
+
+      <div class="actions-section">
+        <div class="section-title">Actions</div>
+        <button id="test-autofill-btn" class="secondary" style="margin-bottom: 8px;">
+          Test Autofill on Current Page
+        </button>
+        <button id="unpair-btn" class="danger">
+          Unpair Extension
+        </button>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="footer-links">
+        <a href="#" id="help-link">Help</a>
+        <a href="#" id="settings-link">Settings</a>
+        <a href="#" id="about-link">About</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

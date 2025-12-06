@@ -2,6 +2,44 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [1.10.0] - 2024-12-05
+
+### Added
+
+- Browser extension for Chrome/Chromium and Firefox with secure credential autofill.
+- Chrome extension with Manifest v3 (service worker architecture).
+- Firefox extension with Manifest v2 (background script with browser.* APIs).
+- Secure pairing system using 6-digit codes for extension-to-desktop authentication.
+- Token-based authentication with browser fingerprinting for security.
+- Auto-fill interface with visual lock icons on password fields.
+- Multi-credential selector modal when multiple entries match an origin.
+- Automatic credential save prompts when detecting form submissions.
+- Browser-specific build scripts (`build-chrome.sh`, `build-firefox.sh`, `build-all.sh`).
+- Comprehensive extension documentation and usage guide.
+- Desktop approval integration - extension queries require user approval in desktop app.
+
+### Changed
+
+- Browser bridge API now fully integrated with extension workflow.
+- Token expiration handling (30-day tokens) with automatic re-pairing prompts.
+- Origin-based credential isolation for enhanced security.
+
+### Security
+
+- Browser fingerprinting prevents token theft across different browsers.
+- Localhost-only communication (HTTP on 127.0.0.1:43110).
+- Token storage in browser's encrypted storage (`chrome.storage.local`).
+- All credential access requires desktop approval (leverages v1.9.1 approval system).
+- Audit trail for all extension credential queries.
+
+### Notes
+
+- Extension currently uses HTTP. TLS with certificate pinning planned for v1.11.0.
+- Firefox extension requires temporary add-on loading (needs Mozilla signing for distribution).
+- Chrome extension can be loaded in developer mode for testing.
+
+---
+
 ## [1.9.1] - 2024-12-05
 
 ### Added

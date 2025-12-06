@@ -2,6 +2,7 @@
 
 import sys
 import time
+import threading
 from typing import Optional
 
 import pyperclip
@@ -9,6 +10,7 @@ from PyQt5.QtCore import QSize
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import Qt as QtCoreQt
 from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QAction,
@@ -90,6 +92,80 @@ from secure_password_manager.utils.two_factor import (
     is_2fa_enabled,
     setup_totp,
 )
+
+
+class ApprovalSignalHandler(QObject):
+    """Thread-safe signal handler for approval requests."""
+
+    approval_requested = pyqtSignal(object, object)  # request, result_container
+
+    def __init__(self):
+        super().__init__()
+        self.main_window = None
+
+    def set_main_window(self, window):
+        """Set the main window reference."""
+        self.main_window = window
+
+    def request_approval(self, request: ApprovalRequest) -> ApprovalResponse:
+        """Request approval from the main thread."""
+        # Container to hold the result
+        result_container = {'response': None, 'event': threading.Event()}
+
+        # Emit signal to main thread
+        self.approval_requested.emit(request, result_container)
+
+        # Wait for the main thread to process the dialog
+        result_container['event'].wait(timeout=60)  # 60 second timeout
+
+        response = result_container.get('response')
+        if response is None:
+            # Timeout or error
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.TIMEOUT,
+                remember=False,
+            )
+        return response
+
+    def handle_approval_in_main_thread(self, request: ApprovalRequest, result_container: dict):
+        """Handle approval dialog in the main GUI thread."""
+        try:
+            # Create dialog with main window as parent
+            dialog = ApprovalDialog(request, parent=self.main_window)
+            dialog.exec_()
+
+            if dialog.response:
+                result_container['response'] = dialog.response
+            else:
+                # User closed dialog without choosing - treat as denial
+                result_container['response'] = ApprovalResponse(
+                    request_id=request.request_id,
+                    decision=ApprovalDecision.DENIED,
+                    remember=False,
+                )
+        except Exception as e:
+            # On error, deny the request
+            result_container['response'] = ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                remember=False,
+            )
+        finally:
+            # Signal that we're done
+            result_container['event'].set()
+
+
+# Global signal handler instance
+_approval_signal_handler: Optional[ApprovalSignalHandler] = None
+
+
+def get_approval_signal_handler() -> ApprovalSignalHandler:
+    """Get or create the global approval signal handler."""
+    global _approval_signal_handler
+    if _approval_signal_handler is None:
+        _approval_signal_handler = ApprovalSignalHandler()
+    return _approval_signal_handler
 
 
 class ApprovalDialog(QDialog):
@@ -208,30 +284,18 @@ def gui_approval_prompt(request: ApprovalRequest) -> ApprovalResponse:
     """
     Display a GUI approval dialog for browser extension credential access.
 
+    This function can be called from any thread (e.g., the FastAPI background thread).
+    It uses Qt signals to safely delegate the dialog creation to the main GUI thread.
+
     Args:
         request: The approval request details
 
     Returns:
         ApprovalResponse with user's decision
     """
-    # Create a temporary QApplication if one doesn't exist
-    # (shouldn't happen in normal GUI mode, but safe fallback)
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-
-    dialog = ApprovalDialog(request)
-    dialog.exec_()
-
-    if dialog.response:
-        return dialog.response
-    else:
-        # User closed dialog without choosing - treat as denial
-        return ApprovalResponse(
-            request_id=request.request_id,
-            decision=ApprovalDecision.DENIED,
-            remember=False,
-        )
+    # Use the signal handler to request approval from the main thread
+    handler = get_approval_signal_handler()
+    return handler.request_approval(request)
 
 
 class PasswordManagerApp(QMainWindow):
@@ -260,10 +324,9 @@ class PasswordManagerApp(QMainWindow):
 
         # Set master password context and verify key access
         if is_key_protected():
-            # Key is protected, set context and verify we can decrypt it
             try:
                 set_master_password_context(password)
-                load_key()  # Verify we can load the protected key
+                load_key()
             except ValueError as e:
                 QMessageBox.critical(
                     self,
@@ -278,15 +341,25 @@ class PasswordManagerApp(QMainWindow):
                 )
                 sys.exit(1)
         else:
-            # Key is not protected, but we should still set context for potential protection later
             set_master_password_context(password)
 
-        # Set up approval prompt handler for browser bridge
+        # Initialize browser bridge service first (before setting up UI)
+        self.browser_bridge_service = get_browser_bridge_service()
+        self._bridge_pairing_message = "Pairing code not generated yet."
+
+        # Set up thread-safe approval signal handler
+        self._approval_signal_handler = get_approval_signal_handler()
+        self._approval_signal_handler.set_main_window(self)
+        self._approval_signal_handler.approval_requested.connect(
+            self._approval_signal_handler.handle_approval_in_main_thread
+        )
+
+        # Set up approval prompt handler BEFORE initializing browser bridge
+        # This ensures the handler is ready when the service starts
         approval_manager = get_approval_manager()
         approval_manager.set_prompt_handler(gui_approval_prompt)
 
-        self.browser_bridge_service = get_browser_bridge_service()
-        self._bridge_pairing_message = "Pairing code not generated yet."
+        # Now initialize browser bridge (may start the service)
         self.initialize_browser_bridge()
 
         # Create UI
@@ -1370,33 +1443,25 @@ class PasswordManagerApp(QMainWindow):
                     if confirm == QMessageBox.No:
                         return
 
-            # Encrypt the new password and determine rotation reason
-            rotation_reason = "manual"
-            if new_password != password:
+                # Encrypt the new password
                 encrypted_password = encrypt_password(new_password)
 
-                # Show rotation reason dialog if password changed
-                reason_msg = QMessageBox()
-                reason_msg.setWindowTitle("Password Change Reason")
-                reason_msg.setText("Why are you changing this password?")
-                reason_msg.setIcon(QMessageBox.Question)
+            # Determine rotation reason if password changed
+            rotation_reason = None
+            if change_pwd_check.isChecked():
+                from PyQt5.QtWidgets import QButtonGroup
 
-                manual_btn = reason_msg.addButton("Manual Update", QMessageBox.ActionRole)
-                expiry_btn = reason_msg.addButton("Password Expired", QMessageBox.ActionRole)
-                breach_btn = reason_msg.addButton("Security Breach", QMessageBox.ActionRole)
-                strength_btn = reason_msg.addButton("Weak Password", QMessageBox.ActionRole)
-
-                reason_msg.exec_()
-
-                clicked = reason_msg.clickedButton()
-                if clicked == manual_btn:
-                    rotation_reason = "manual"
-                elif clicked == expiry_btn:
-                    rotation_reason = "expiry"
-                elif clicked == breach_btn:
-                    rotation_reason = "breach"
-                elif clicked == strength_btn:
-                    rotation_reason = "strength"
+                reason_group_obj = dialog.findChild(QButtonGroup)
+                if reason_group_obj and isinstance(reason_group_obj, QButtonGroup):
+                    clicked = reason_group_obj.checkedButton()
+                    if clicked == reason_group_obj.button(1):  # manual_btn
+                        rotation_reason = "manual"
+                    elif clicked == reason_group_obj.button(2):  # expiry_btn
+                        rotation_reason = "expiry"
+                    elif clicked == reason_group_obj.button(3):  # breach_btn
+                        rotation_reason = "breach"
+                    elif clicked == reason_group_obj.button(4):  # strength_btn
+                        rotation_reason = "strength"
 
             # Parse expiry days
             expiry_days = None
@@ -1408,21 +1473,23 @@ class PasswordManagerApp(QMainWindow):
                     return
 
             # Update the password entry
-            update_password(
-                entry_id,
-                website=new_website if new_website != website else None,
-                username=new_username if new_username != username else None,
-                encrypted_password=encrypted_password,
-                category=new_category if new_category != category else None,
-                notes=new_notes if new_notes != notes else None,
-                expiry_days=expiry_days,
-                favorite=new_favorite if new_favorite != favorite else None,
-                rotation_reason=rotation_reason,
-            )
+            kwargs = {
+                "website": new_website if new_website != website else None,
+                "username": new_username if new_username != username else None,
+                "encrypted_password": encrypted_password,  # This will be None if password wasn't changed
+                "category": new_category if new_category != category else None,
+                "notes": new_notes if new_notes != notes else None,
+                "expiry_days": expiry_days,
+                "favorite": new_favorite if new_favorite != favorite else None,
+            }
+            if rotation_reason is not None:
+                kwargs["rotation_reason"] = rotation_reason
 
+            update_password(entry_id, **kwargs)
+
+            QMessageBox.information(dialog, "Success", "Password updated successfully")
             dialog.accept()
             self.refresh_passwords()
-            self.statusBar().showMessage("Password updated successfully", 3000)
 
         buttons.accepted.connect(accept)
         buttons.rejected.connect(dialog.reject)
@@ -2333,6 +2400,8 @@ class PasswordManagerApp(QMainWindow):
             return
         finally:
             QApplication.restoreOverrideCursor()
+
+
 
         info_lines = [
             f"Iterations: {summary['iterations']:,}",
