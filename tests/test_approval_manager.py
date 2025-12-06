@@ -1,9 +1,6 @@
 """Tests for the approval manager system."""
 
-import json
-import tempfile
 import time
-from pathlib import Path
 
 import pytest
 
@@ -123,9 +120,7 @@ def test_approval_store_clear_all(temp_approval_store):
     # Add multiple approvals
     for i in range(5):
         temp_approval_store.remember_approval(
-            f"https://site{i}.com",
-            f"fp{i}",
-            approved=True
+            f"https://site{i}.com", f"fp{i}", approved=True
         )
 
     # Clear all
@@ -172,6 +167,7 @@ def test_approval_manager_timeout_no_handler(approval_manager):
 
 def test_approval_manager_with_handler(approval_manager):
     """Test approval with a custom handler."""
+
     # Set up a handler that always approves
     def auto_approve_handler(request: ApprovalRequest) -> ApprovalResponse:
         return ApprovalResponse(
@@ -194,6 +190,7 @@ def test_approval_manager_with_handler(approval_manager):
 
 def test_approval_manager_handler_remembers_decision(approval_manager):
     """Test that handler can remember decisions."""
+
     # Handler that approves and remembers
     def remember_approve_handler(request: ApprovalRequest) -> ApprovalResponse:
         return ApprovalResponse(
@@ -234,6 +231,7 @@ def test_approval_manager_handler_remembers_decision(approval_manager):
 
 def test_approval_manager_handler_denies(approval_manager):
     """Test handler that denies requests."""
+
     # Handler that denies
     def deny_handler(request: ApprovalRequest) -> ApprovalResponse:
         return ApprovalResponse(
@@ -285,6 +283,7 @@ def test_approval_manager_username_preview(approval_manager):
 
 def test_approval_manager_cleanup_old_responses(approval_manager):
     """Test cleanup of old approval responses."""
+
     # Set handler that approves
     def approve_handler(request: ApprovalRequest) -> ApprovalResponse:
         return ApprovalResponse(
@@ -352,6 +351,7 @@ def test_get_approval_manager_singleton():
 
 def test_approval_manager_handler_exception(approval_manager):
     """Test that handler exceptions are caught gracefully."""
+
     # Handler that raises an exception
     def error_handler(request: ApprovalRequest) -> ApprovalResponse:
         raise ValueError("Handler error")

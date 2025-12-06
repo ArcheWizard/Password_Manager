@@ -49,20 +49,23 @@ Official browser extensions for **Chrome/Chromium** and **Firefox** provide seam
 
 ### Features
 
-- **🔒 Secure Pairing**: Pair with desktop app using 6-digit codes
-- **🔑 Auto-Fill**: Click lock icon on password fields to fill credentials
-- **💾 Save Credentials**: Automatically prompts to save new logins
-- **✅ Desktop Approval**: All credential access requires explicit approval in desktop app
-- **🦊 Multi-Browser**: Chrome (Manifest v3) and Firefox (Manifest v2) support
+- **Secure Pairing**: Pair with desktop app using 6-digit codes
+- **Auto-Fill**: Click lock icon on password fields to fill credentials
+- **Save Credentials**: Automatically prompts to save new logins
+- **Desktop Approval**: All credential access requires explicit approval in desktop app
+- **Multi-Browser**: Chrome (Manifest v3) and Firefox (Manifest v2) support
 
 ### Installation
 
 **Build and Load Extension**:
+
 ```bash
+
 cd browser-extension
 ./build-chrome.sh      # For Chrome/Chromium
 ./build-firefox.sh     # For Firefox
 ./build-all.sh         # Build both
+
 ```
 
 **Chrome**: Load unpacked extension from `browser-extension/build/chrome/` at `chrome://extensions/`

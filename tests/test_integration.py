@@ -1,10 +1,8 @@
 """Integration tests for password manager."""
 
 import os
-import sqlite3
 import sys
 import tempfile
-from unittest.mock import patch
 
 import pytest
 
@@ -16,9 +14,8 @@ from secure_password_manager.utils.crypto import (
     decrypt_password,
     encrypt_password,
     generate_key,
-    set_master_password_context,
 )
-from secure_password_manager.utils.database import add_password, get_passwords, init_db
+from secure_password_manager.utils.database import add_password, get_passwords
 
 
 @pytest.fixture
@@ -78,7 +75,6 @@ def test_master_password_auth(clean_crypto_files):
 
 def test_backup_and_restore(test_db):
     """Test backup and restore functionality."""
-    import time
 
     # Create temporary backup file
     fd, backup_path = tempfile.mkstemp(suffix=".json")

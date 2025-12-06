@@ -1,16 +1,12 @@
 """PyQt5 version of the Password Manager."""
 
 import sys
-import time
 import threading
+import time
 from typing import Optional
 
-import pyperclip
-from PyQt5.QtCore import QSize
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QObject, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtCore import Qt as QtCoreQt
-from PyQt5.QtCore import QTimer
-from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QAction,
@@ -29,8 +25,8 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
-    QRadioButton,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
@@ -48,9 +44,10 @@ from secure_password_manager.utils.approval_manager import (
     ApprovalResponse,
     get_approval_manager,
 )
-from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import export_passwords, import_passwords
+from secure_password_manager.utils.clipboard_manager import copy_to_clipboard
+from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.crypto import (
     decrypt_password,
     encrypt_password,
@@ -64,15 +61,10 @@ from secure_password_manager.utils.database import (
     add_password,
     delete_password,
     get_categories,
-    get_passwords,
     get_password_history,
+    get_passwords,
     init_db,
     update_password,
-)
-from secure_password_manager.utils.logger import get_log_entries
-from secure_password_manager.utils.password_analysis import (
-    evaluate_password_strength,
-    generate_secure_password,
 )
 from secure_password_manager.utils.key_management import (
     KeyManagementError,
@@ -81,12 +73,16 @@ from secure_password_manager.utils.key_management import (
     get_key_mode,
     switch_key_mode,
 )
+from secure_password_manager.utils.logger import get_log_entries
+from secure_password_manager.utils.password_analysis import (
+    evaluate_password_strength,
+    generate_secure_password,
+)
 from secure_password_manager.utils.paths import (
     get_auth_json_path,
     get_secret_key_enc_path,
     get_secret_key_path,
 )
-from secure_password_manager.utils.clipboard_manager import copy_to_clipboard
 from secure_password_manager.utils.two_factor import (
     disable_2fa,
     is_2fa_enabled,
@@ -110,15 +106,15 @@ class ApprovalSignalHandler(QObject):
     def request_approval(self, request: ApprovalRequest) -> ApprovalResponse:
         """Request approval from the main thread."""
         # Container to hold the result
-        result_container = {'response': None, 'event': threading.Event()}
+        result_container = {"response": None, "event": threading.Event()}
 
         # Emit signal to main thread
         self.approval_requested.emit(request, result_container)
 
         # Wait for the main thread to process the dialog
-        result_container['event'].wait(timeout=60)  # 60 second timeout
+        result_container["event"].wait(timeout=60)  # 60 second timeout
 
-        response = result_container.get('response')
+        response = result_container.get("response")
         if response is None:
             # Timeout or error
             return ApprovalResponse(
@@ -128,7 +124,9 @@ class ApprovalSignalHandler(QObject):
             )
         return response
 
-    def handle_approval_in_main_thread(self, request: ApprovalRequest, result_container: dict):
+    def handle_approval_in_main_thread(
+        self, request: ApprovalRequest, result_container: dict
+    ):
         """Handle approval dialog in the main GUI thread."""
         try:
             # Create dialog with main window as parent
@@ -136,24 +134,24 @@ class ApprovalSignalHandler(QObject):
             dialog.exec_()
 
             if dialog.response:
-                result_container['response'] = dialog.response
+                result_container["response"] = dialog.response
             else:
                 # User closed dialog without choosing - treat as denial
-                result_container['response'] = ApprovalResponse(
+                result_container["response"] = ApprovalResponse(
                     request_id=request.request_id,
                     decision=ApprovalDecision.DENIED,
                     remember=False,
                 )
-        except Exception as e:
+        except Exception:
             # On error, deny the request
-            result_container['response'] = ApprovalResponse(
+            result_container["response"] = ApprovalResponse(
                 request_id=request.request_id,
                 decision=ApprovalDecision.DENIED,
                 remember=False,
             )
         finally:
             # Signal that we're done
-            result_container['event'].set()
+            result_container["event"].set()
 
 
 # Global signal handler instance
@@ -972,7 +970,9 @@ class PasswordManagerApp(QMainWindow):
         )  # Get the stored password
 
         copy_to_clipboard(password)
-        self.statusBar().showMessage("Password copied to clipboard (auto-clear enabled)", 3000)
+        self.statusBar().showMessage(
+            "Password copied to clipboard (auto-clear enabled)", 3000
+        )
 
         if auto_close:
             auto_close.close()
@@ -1015,7 +1015,7 @@ class PasswordManagerApp(QMainWindow):
             QMessageBox.information(
                 self,
                 "Password History",
-                f"No password history found for {website} ({username})"
+                f"No password history found for {website} ({username})",
             )
             if auto_close:
                 auto_close.close()
@@ -1036,9 +1036,9 @@ class PasswordManagerApp(QMainWindow):
         # History table
         history_table = QTableWidget()
         history_table.setColumnCount(4)
-        history_table.setHorizontalHeaderLabels([
-            "#", "Old Password", "Changed At", "Reason"
-        ])
+        history_table.setHorizontalHeaderLabels(
+            ["#", "Old Password", "Changed At", "Reason"]
+        )
         history_table.setRowCount(len(history))
         history_table.setAlternatingRowColors(True)
         history_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -2159,7 +2159,9 @@ class PasswordManagerApp(QMainWindow):
         if not hasattr(self, "key_mode_label"):
             return
         mode = get_key_mode()
-        key_present = get_secret_key_path().exists() or get_secret_key_enc_path().exists()
+        key_present = (
+            get_secret_key_path().exists() or get_secret_key_enc_path().exists()
+        )
         secret_state = "Secret key present" if key_present else "No secret key stored"
         self.key_mode_label.setText(
             f"Mode: {self._format_key_mode_label(mode)}\n{secret_state}"
@@ -2223,7 +2225,9 @@ class PasswordManagerApp(QMainWindow):
         self.bridge_status_label.setText(status_text)
         self.bridge_status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
 
-        endpoint = f"http://{settings.get('host', '127.0.0.1')}:{settings.get('port', 43110)}"
+        endpoint = (
+            f"http://{settings.get('host', '127.0.0.1')}:{settings.get('port', 43110)}"
+        )
         self.bridge_endpoint_label.setText(f"Endpoint: {endpoint}")
 
         self.bridge_start_stop_btn.setText(
@@ -2401,8 +2405,6 @@ class PasswordManagerApp(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-
-
         info_lines = [
             f"Iterations: {summary['iterations']:,}",
             f"Salt size: {summary['salt_bytes']} bytes",
@@ -2510,7 +2512,10 @@ class PasswordManagerApp(QMainWindow):
         self.update_browser_bridge_widgets()
 
     def closeEvent(self, event):  # type: ignore[override]
-        if hasattr(self, "browser_bridge_service") and self.browser_bridge_service.is_running:
+        if (
+            hasattr(self, "browser_bridge_service")
+            and self.browser_bridge_service.is_running
+        ):
             self.browser_bridge_service.stop()
         super().closeEvent(event)
 

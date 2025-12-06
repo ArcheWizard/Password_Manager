@@ -114,7 +114,7 @@ def analyze_password_security(password: str) -> Dict[str, Any]:
 
     Returns a dictionary with analysis results.
     """
-    from utils.password_analysis import (
+    from secure_password_manager.utils.password_analysis import (
         calculate_entropy,
         check_common_patterns,
         evaluate_password_strength,

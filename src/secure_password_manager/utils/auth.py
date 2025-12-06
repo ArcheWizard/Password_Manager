@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional
 from secure_password_manager.utils.config import get_setting
 from secure_password_manager.utils.paths import get_auth_json_path
 
-
 DEFAULT_AUTH_ITERATIONS = 390_000
 
 
@@ -36,7 +35,7 @@ def _load_auth_data() -> Optional[Dict[str, Any]]:
     if not os.path.exists(auth_file):
         return None
     try:
-        with open(auth_file, "r", encoding="utf-8") as handle:
+        with open(auth_file, encoding="utf-8") as handle:
             data = json.load(handle)
         return data if isinstance(data, dict) else None
     except (OSError, json.JSONDecodeError):

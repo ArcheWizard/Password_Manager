@@ -12,7 +12,7 @@ def test_set_master_password_stores_pbkdf2_record(test_env):
     auth_path = get_auth_json_path()
     assert auth_path.exists()
 
-    with open(auth_path, "r", encoding="utf-8") as handle:
+    with open(auth_path, encoding="utf-8") as handle:
         record = json.load(handle)
 
     assert record["kdf"]["algorithm"] == "PBKDF2-HMAC-SHA256"
@@ -32,6 +32,6 @@ def test_authenticate_upgrades_legacy_hash(test_env):
     assert authenticate(legacy_password) is True
 
     # After successful authentication the file should be upgraded
-    with open(auth_path, "r", encoding="utf-8") as handle:
+    with open(auth_path, encoding="utf-8") as handle:
         record = json.load(handle)
     assert "hash" in record and "kdf" in record

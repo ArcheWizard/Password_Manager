@@ -8,13 +8,19 @@ from secure_password_manager.utils.approval_manager import (
     ApprovalResponse,
     get_approval_manager,
 )
-from secure_password_manager.utils.database import add_password, init_db
 from secure_password_manager.utils.crypto import encrypt_password
+from secure_password_manager.utils.database import add_password, init_db
 
 
 @pytest.fixture
-def setup_test_credentials():
+def setup_test_credentials(clean_crypto_files, clean_database):
     """Set up test credentials in the database."""
+    from secure_password_manager.utils.crypto import generate_key
+
+    # Generate key file for encryption (file-key mode)
+    generate_key()
+
+    # Initialize database
     init_db()
 
     # Add a test credential
@@ -90,9 +96,7 @@ def test_remembered_approval_bypasses_prompt(setup_test_credentials):
 
     # Remember approval
     approval_manager.get_approval_store().remember_approval(
-        origin="trusted.com",
-        fingerprint="trusted-fp-789",
-        approved=True
+        origin="trusted.com", fingerprint="trusted-fp-789", approved=True
     )
 
     # Clear handler to ensure prompt isn't called

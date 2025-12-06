@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 from cryptography.fernet import Fernet
 
 from secure_password_manager.utils import config
+from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.crypto import (
     decrypt_password,
@@ -24,7 +25,6 @@ from secure_password_manager.utils.crypto import (
     save_kdf_params,
     unprotect_key,
 )
-from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.paths import (
     get_database_path,
     get_secret_key_enc_path,
@@ -81,16 +81,16 @@ def _reencrypt_vault(
         for entry_id, encrypted in rows:
             plaintext = decrypt_password(
                 encrypted,
-                master_password=master_password
-                if source_mode == KEY_MODE_PASSWORD
-                else None,
+                master_password=(
+                    master_password if source_mode == KEY_MODE_PASSWORD else None
+                ),
                 force_mode=source_mode,
             )
             ciphertext = encrypt_password(
                 plaintext,
-                master_password=master_password
-                if target_mode == KEY_MODE_PASSWORD
-                else None,
+                master_password=(
+                    master_password if target_mode == KEY_MODE_PASSWORD else None
+                ),
                 force_mode=target_mode,
             )
             cursor.execute(
@@ -174,7 +174,9 @@ def switch_key_mode(target_mode: str, master_password: str) -> Dict[str, str | i
     return {"mode": target_mode, "entries_reencrypted": updated}
 
 
-def benchmark_kdf(target_ms: int = 350, max_iterations: int = 2_000_000) -> Dict[str, Any]:
+def benchmark_kdf(
+    target_ms: int = 350, max_iterations: int = 2_000_000
+) -> Dict[str, Any]:
     """Benchmark PBKDF2-HMAC-SHA256 and recommend iterations for the target runtime."""
     if target_ms < 50:
         raise KeyManagementError("Target runtime must be at least 50 ms")

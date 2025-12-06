@@ -9,10 +9,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware  # Add this import
 from pydantic import BaseModel
-import uvicorn
 
 from secure_password_manager.utils import config
 from secure_password_manager.utils.approval_manager import (
@@ -50,7 +50,7 @@ class TokenStore:
         try:
             import json
 
-            with open(self.path, "r", encoding="utf-8") as handle:
+            with open(self.path, encoding="utf-8") as handle:
                 data = json.load(handle)
             if isinstance(data, dict):
                 return data
@@ -60,7 +60,6 @@ class TokenStore:
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        import json
 
         with open(self.path, "w", encoding="utf-8") as handle:
             json.dump(self._tokens, handle, indent=2, sort_keys=True)
@@ -96,9 +95,7 @@ class TokenStore:
 
     def list_tokens(self) -> List[Dict[str, Any]]:
         now = time.time()
-        return [
-            rec for rec in self._tokens.values() if rec.get("expires_at", 0) > now
-        ]
+        return [rec for rec in self._tokens.values() if rec.get("expires_at", 0) > now]
 
 
 class BrowserBridgeService:
@@ -110,9 +107,7 @@ class BrowserBridgeService:
         self.port = port or int(settings.get("port", 43110))
         ttl_hours = int(settings.get("token_ttl_hours", 24))
         self._token_store = TokenStore(get_browser_bridge_tokens_path(), ttl_hours)
-        self._pairing_window_seconds = int(
-            settings.get("pairing_window_seconds", 120)
-        )
+        self._pairing_window_seconds = int(settings.get("pairing_window_seconds", 120))
         self._pairing: Optional[Dict[str, Any]] = None
         self._app = self._build_app()
         self._server: Optional[uvicorn.Server] = None
@@ -158,10 +153,17 @@ class BrowserBridgeService:
         @app.post("/v1/pair")
         async def pair_endpoint(payload: PairingRequest) -> Dict[str, Any]:
             if not service._pairing or service._pairing["expires_at"] < time.time():
-                raise HTTPException(status_code=status.HTTP_410_GONE, detail="No active pairing session")
+                raise HTTPException(
+                    status_code=status.HTTP_410_GONE, detail="No active pairing session"
+                )
             if payload.code != service._pairing["code"]:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid pairing code")
-            record = service._token_store.issue_token(payload.fingerprint, payload.browser)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid pairing code",
+                )
+            record = service._token_store.issue_token(
+                payload.fingerprint, payload.browser
+            )
             service._pairing = None
             log_info(
                 f"Issued browser bridge token for {payload.fingerprint} ({payload.browser or 'unknown'})"
@@ -181,8 +183,12 @@ class BrowserBridgeService:
 
             # Extract domain from origin for better matching
             # e.g., "https://github.com" -> "github.com" -> "github"
-            origin_domain = origin.replace("https://", "").replace("http://", "").split("/")[0]
-            origin_name = origin_domain.split(".")[0] if "." in origin_domain else origin_domain
+            origin_domain = (
+                origin.replace("https://", "").replace("http://", "").split("/")[0]
+            )
+            origin_name = (
+                origin_domain.split(".")[0] if "." in origin_domain else origin_domain
+            )
 
             for entry in get_passwords():
                 (
@@ -205,8 +211,13 @@ class BrowserBridgeService:
                 # 2. Origin domain is in website (e.g., "github.com" in "Github")
                 # 3. Origin name is in website (e.g., "github" matches "Github", "GitHub", etc.)
                 # 4. Origin or domain is in notes field
-                if not (origin in site or origin_domain in site or origin_name in site or
-                        origin in notes or origin_domain in notes):
+                if not (
+                    origin in site
+                    or origin_domain in site
+                    or origin_name in site
+                    or origin in notes
+                    or origin_domain in notes
+                ):
                     continue
                 try:
                     password = decrypt_password(encrypted)
@@ -258,15 +269,15 @@ class BrowserBridgeService:
                     # Denied or timed out
                     return {
                         "entries": [],
-                        "error": "Access denied" if response.decision == ApprovalDecision.DENIED else "Request timed out",
+                        "error": (
+                            "Access denied"
+                            if response.decision == ApprovalDecision.DENIED
+                            else "Request timed out"
+                        ),
                     }
             except Exception as exc:
                 log_warning(f"Approval request failed: {exc}")
-                return {
-                    "entries": [],
-                    "error": "Approval request failed"
-                }
-
+                return {"entries": [], "error": "Approval request failed"}
 
         @app.post("/v1/credentials/store")
         async def credentials_store(

@@ -12,9 +12,9 @@ from secure_password_manager.utils.crypto import (
     decrypt_password,
     encrypt_password,
     is_key_protected,
+    load_kdf_params,
     protect_key_with_master_password,
     set_master_password_context,
-    load_kdf_params,
 )
 from secure_password_manager.utils.database import add_password, get_passwords
 from secure_password_manager.utils.key_management import (
@@ -50,7 +50,9 @@ def test_switch_to_password_mode_reencrypts_entries(clean_crypto_files, clean_da
     assert decrypt_password(rows[0][3]) == original
 
 
-def test_switch_back_to_file_mode_restores_secret_key(clean_crypto_files, clean_database):
+def test_switch_back_to_file_mode_restores_secret_key(
+    clean_crypto_files, clean_database
+):
     password = "correct horse battery staple"
     set_master_password(password)
     set_master_password_context(password)

@@ -44,6 +44,6 @@ def test_token_store_recovers_from_corrupt_file(tmp_path):
     record = store.issue_token("fingerprint", "edge")
     assert store.validate(record["token"]) is not None
 
-    with open(store_path, "r", encoding="utf-8") as handle:
+    with open(store_path, encoding="utf-8") as handle:
         # ensure valid JSON now
         json.load(handle)

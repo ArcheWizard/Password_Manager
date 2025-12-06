@@ -399,7 +399,7 @@ def decrypt_with_password_envelope(blob: bytes, password: str) -> str:
                 raise ValueError("Backup integrity verification failed")
             plaintext = Fernet(enc_key).decrypt(token).decode("utf-8")
             return plaintext
-    except Exception as e:
+    except Exception:
         # Re-raise if it's an integrity verification failure
         if integrity_error:
             raise

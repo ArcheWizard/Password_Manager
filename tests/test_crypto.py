@@ -8,7 +8,6 @@ from secure_password_manager.utils.crypto import (
     encrypt_password,
     generate_key,
     load_key,
-    set_master_password_context,
 )
 
 

@@ -6,13 +6,9 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-import pyperclip
 from colorama import Fore, Style, init
 
-from secure_password_manager.services.browser_bridge import (
-    BrowserBridgeService,
-    get_browser_bridge_service,
-)
+from secure_password_manager.services.browser_bridge import get_browser_bridge_service
 from secure_password_manager.utils import config
 from secure_password_manager.utils.approval_manager import (
     ApprovalDecision,
@@ -20,7 +16,6 @@ from secure_password_manager.utils.approval_manager import (
     ApprovalResponse,
     get_approval_manager,
 )
-from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.auth import authenticate, set_master_password
 from secure_password_manager.utils.backup import (
     create_full_backup,
@@ -28,6 +23,8 @@ from secure_password_manager.utils.backup import (
     import_passwords,
     restore_from_backup,
 )
+from secure_password_manager.utils.clipboard_manager import copy_to_clipboard
+from secure_password_manager.utils.config import KEY_MODE_FILE, KEY_MODE_PASSWORD
 from secure_password_manager.utils.crypto import (
     decrypt_password,
     encrypt_password,
@@ -37,6 +34,17 @@ from secure_password_manager.utils.crypto import (
     set_master_password_context,
     unprotect_key,
 )
+from secure_password_manager.utils.database import (
+    add_category,
+    add_password,
+    delete_password,
+    get_categories,
+    get_expiring_passwords,
+    get_password_history,
+    get_passwords,
+    init_db,
+    update_password,
+)
 from secure_password_manager.utils.key_management import (
     KeyManagementError,
     apply_kdf_parameters,
@@ -44,23 +52,16 @@ from secure_password_manager.utils.key_management import (
     get_key_mode,
     switch_key_mode,
 )
-from secure_password_manager.utils.database import (
-    add_category,
-    add_password,
-    delete_password,
-    get_categories,
-    get_expiring_passwords,
-    get_passwords,
-    get_password_history,
-    get_all_password_history,
-    init_db,
-    update_password,
-)
 from secure_password_manager.utils.logger import get_log_entries, log_info
 from secure_password_manager.utils.password_analysis import (
     evaluate_password_strength,
     generate_secure_password,
     get_password_improvement_suggestions,
+)
+from secure_password_manager.utils.paths import (
+    get_database_path,
+    get_secret_key_enc_path,
+    get_secret_key_path,
 )
 from secure_password_manager.utils.security_audit import run_security_audit
 from secure_password_manager.utils.two_factor import (
@@ -77,12 +78,6 @@ from secure_password_manager.utils.ui import (
     print_table,
     print_warning,
 )
-from secure_password_manager.utils.paths import (
-    get_database_path,
-    get_secret_key_enc_path,
-    get_secret_key_path,
-)
-from secure_password_manager.utils.clipboard_manager import copy_to_clipboard
 
 # Initialize Colorama
 init(autoreset=True)
@@ -419,7 +414,9 @@ def view_password_history_entry() -> None:
         website = target_entry[1]
         username = target_entry[2]
 
-        print(f"\nPassword history for: {Fore.CYAN}{website}{Style.RESET_ALL} ({username})\n")
+        print(
+            f"\nPassword history for: {Fore.CYAN}{website}{Style.RESET_ALL} ({username})\n"
+        )
 
         # Get history
         history = get_password_history(entry_id)
@@ -453,13 +450,15 @@ def view_password_history_entry() -> None:
 
             reason_display = f"{reason_color}{reason.capitalize()}{Style.RESET_ALL}"
 
-            rows.append([
-                hist_id,
-                old_password,
-                changed_str,
-                reason_display,
-                changed_by,
-            ])
+            rows.append(
+                [
+                    hist_id,
+                    old_password,
+                    changed_str,
+                    reason_display,
+                    changed_by,
+                ]
+            )
 
         headers = ["#", "Old Password", "Changed At", "Reason", "Changed By"]
         print_table(headers, rows)
@@ -629,12 +628,7 @@ def edit_password() -> None:
             print(f"{Fore.YELLOW}[4]{Fore.RESET} Weak password")
             reason_choice = input("Select reason (default: 1): ").strip() or "1"
 
-            reason_map = {
-                "1": "manual",
-                "2": "expiry",
-                "3": "breach",
-                "4": "strength"
-            }
+            reason_map = {"1": "manual", "2": "expiry", "3": "breach", "4": "strength"}
             rotation_reason = reason_map.get(reason_choice, "manual")
         else:
             encrypted_password = None  # No change
@@ -1191,9 +1185,7 @@ def settings_menu() -> None:
             try:
                 unprotect_key(current_pass)
                 protect_key_with_master_password(new_pass)
-                print_success(
-                    "Master password changed and encryption key re-protected"
-                )
+                print_success("Master password changed and encryption key re-protected")
             except Exception as exc:
                 print_warning(
                     "Password changed but key re-protection failed: " + str(exc)
@@ -1337,7 +1329,9 @@ def browser_bridge_menu() -> None:
 
     while True:
         settings = _get_browser_bridge_settings()
-        endpoint = f"http://{settings.get('host', '127.0.0.1')}:{settings.get('port', 43110)}"
+        endpoint = (
+            f"http://{settings.get('host', '127.0.0.1')}:{settings.get('port', 43110)}"
+        )
 
         print_header("Browser Bridge (Experimental)")
         print(f"Enabled: {'Yes' if settings.get('enabled') else 'No'}")
@@ -1374,13 +1368,13 @@ def browser_bridge_menu() -> None:
 
         elif choice == "3":
             if not service.is_running:
-                print_warning("Start the browser bridge before generating a pairing code.")
+                print_warning(
+                    "Start the browser bridge before generating a pairing code."
+                )
                 continue
             record = service.generate_pairing_code()
             expires = time.strftime("%H:%M:%S", time.localtime(record["expires_at"]))
-            print_success(
-                f"Pairing code: {record['code']} (expires at {expires})"
-            )
+            print_success(f"Pairing code: {record['code']} (expires at {expires})")
 
         elif choice == "4":
             tokens = service.list_tokens()
@@ -1420,7 +1414,9 @@ def browser_bridge_menu() -> None:
 
 def _print_tokens(tokens: List[Dict[str, Any]]) -> None:
     for idx, token in enumerate(tokens, start=1):
-        expires = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(token["expires_at"]))
+        expires = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(token["expires_at"])
+        )
         fingerprint = token.get("fingerprint", "unknown")
         browser = token.get("browser", "unknown")
         preview = f"{token['token'][:6]}...{token['token'][-4:]}"
@@ -1443,7 +1439,9 @@ def key_management_menu() -> None:
         mode = get_key_mode()
         print_header("Key Management Mode")
         print(f"Current mode: {_format_key_mode_label(mode)}")
-        key_present = get_secret_key_path().exists() or get_secret_key_enc_path().exists()
+        key_present = (
+            get_secret_key_path().exists() or get_secret_key_enc_path().exists()
+        )
         print(f"Secret key files present: {'Yes' if key_present else 'No'}")
         print_menu_option("1", "Switch to master-password-derived mode")
         print_menu_option("2", "Switch to file-key mode")
@@ -1551,9 +1549,7 @@ def kdf_tuning_wizard() -> None:
     try:
         summary = apply_kdf_parameters(master_password, recommended, salt_bytes)
         set_master_password_context(master_password)
-        log_info(
-            "KDF parameters updated via CLI wizard"
-        )
+        log_info("KDF parameters updated via CLI wizard")
     except KeyManagementError as exc:
         print_error(f"Failed to update KDF parameters: {exc}")
         return
@@ -1654,45 +1650,55 @@ def cli_approval_prompt(request: ApprovalRequest) -> ApprovalResponse:
 
     print(f"\n{Fore.CYAN}Origin:{Style.RESET_ALL}     {request.origin}")
     print(f"{Fore.CYAN}Browser:{Style.RESET_ALL}    {request.browser}")
-    print(f"{Fore.CYAN}Entries:{Style.RESET_ALL}    {request.entry_count} credential(s)")
+    print(
+        f"{Fore.CYAN}Entries:{Style.RESET_ALL}    {request.entry_count} credential(s)"
+    )
 
     if request.username_preview:
         print(f"{Fore.CYAN}Username:{Style.RESET_ALL}   {request.username_preview}")
 
-    print(f"\n{Fore.WHITE}Browser fingerprint: {request.fingerprint[:16]}...{Style.RESET_ALL}")
+    print(
+        f"\n{Fore.WHITE}Browser fingerprint: {request.fingerprint[:16]}...{Style.RESET_ALL}"
+    )
     print("\n" + "-" * 70)
 
     while True:
         print(f"\n{Fore.YELLOW}Choose an option:{Style.RESET_ALL}")
         print(f"  {Fore.GREEN}[A]{Style.RESET_ALL} Approve this request")
         print(f"  {Fore.RED}[D]{Style.RESET_ALL} Deny this request")
-        print(f"  {Fore.BLUE}[R]{Style.RESET_ALL} Remember and always approve this origin")
-        print(f"  {Fore.MAGENTA}[N]{Style.RESET_ALL} Remember and always deny this origin")
+        print(
+            f"  {Fore.BLUE}[R]{Style.RESET_ALL} Remember and always approve this origin"
+        )
+        print(
+            f"  {Fore.MAGENTA}[N]{Style.RESET_ALL} Remember and always deny this origin"
+        )
 
-        choice = input(f"\n{Fore.YELLOW}Your decision: {Style.RESET_ALL}").strip().upper()
+        choice = (
+            input(f"\n{Fore.YELLOW}Your decision: {Style.RESET_ALL}").strip().upper()
+        )
 
-        if choice == 'A':
+        if choice == "A":
             print(f"\n{Fore.GREEN}✓ Request approved{Style.RESET_ALL}")
             return ApprovalResponse(
                 request_id=request.request_id,
                 decision=ApprovalDecision.APPROVED,
                 remember=False,
             )
-        elif choice == 'D':
+        elif choice == "D":
             print(f"\n{Fore.RED}✗ Request denied{Style.RESET_ALL}")
             return ApprovalResponse(
                 request_id=request.request_id,
                 decision=ApprovalDecision.DENIED,
                 remember=False,
             )
-        elif choice == 'R':
+        elif choice == "R":
             print(f"\n{Fore.GREEN}✓ Request approved and remembered{Style.RESET_ALL}")
             return ApprovalResponse(
                 request_id=request.request_id,
                 decision=ApprovalDecision.APPROVED,
                 remember=True,
             )
-        elif choice == 'N':
+        elif choice == "N":
             print(f"\n{Fore.RED}✗ Request denied and remembered{Style.RESET_ALL}")
             return ApprovalResponse(
                 request_id=request.request_id,

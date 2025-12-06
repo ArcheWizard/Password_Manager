@@ -2,29 +2,23 @@
 
 import os
 import sys
-import tempfile
-from pathlib import Path
 
 import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from secure_password_manager.utils import config
-from secure_password_manager.utils.crypto import encrypt_password, decrypt_password
+from secure_password_manager.utils.crypto import decrypt_password, encrypt_password
 from secure_password_manager.utils.database import (
     add_password,
-    update_password,
-    get_passwords,
-    get_password_history,
-    get_all_password_history,
     delete_password_history,
+    get_all_password_history,
+    get_password_history,
+    get_passwords,
     init_db,
+    update_password,
 )
-from secure_password_manager.utils.migrations import (
-    get_schema_version,
-    run_migrations,
-    ensure_latest_schema,
-)
+from secure_password_manager.utils.migrations import get_schema_version, run_migrations
 
 
 @pytest.fixture
@@ -39,9 +33,15 @@ def test_db(tmp_path, monkeypatch):
         directory.mkdir(parents=True, exist_ok=True)
 
     # Monkey patch paths
-    monkeypatch.setattr("secure_password_manager.utils.paths.get_data_dir", lambda: data_dir)
-    monkeypatch.setattr("secure_password_manager.utils.paths.get_config_dir", lambda: config_dir)
-    monkeypatch.setattr("secure_password_manager.utils.paths.get_cache_dir", lambda: cache_dir)
+    monkeypatch.setattr(
+        "secure_password_manager.utils.paths.get_data_dir", lambda: data_dir
+    )
+    monkeypatch.setattr(
+        "secure_password_manager.utils.paths.get_config_dir", lambda: config_dir
+    )
+    monkeypatch.setattr(
+        "secure_password_manager.utils.paths.get_cache_dir", lambda: cache_dir
+    )
 
     # Initialize database
     init_db()
@@ -58,16 +58,19 @@ def test_migration_creates_password_history_table(test_db):
     assert version >= 1, "Schema should be at least version 1"
 
     # Check that password_history table exists
-    from secure_password_manager.utils.database import _get_db_file
     import sqlite3
+
+    from secure_password_manager.utils.database import _get_db_file
 
     conn = sqlite3.connect(_get_db_file())
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT name FROM sqlite_master
         WHERE type='table' AND name='password_history'
-    """)
+    """
+    )
 
     result = cursor.fetchone()
     conn.close()
@@ -126,7 +129,9 @@ def test_password_history_rotation_reasons(test_db):
         new_password = f"NewPassword_{reason}"
         new_encrypted = encrypt_password(new_password)
         config.update_settings({"password_history": {"max_versions": 10}})
-        update_password(entry_id, encrypted_password=new_encrypted, rotation_reason=reason)
+        update_password(
+            entry_id, encrypted_password=new_encrypted, rotation_reason=reason
+        )
 
     # Check history
     history = get_password_history(entry_id, limit=10)
@@ -135,7 +140,11 @@ def test_password_history_rotation_reasons(test_db):
 
     # Verify all reasons are present (order might vary due to same timestamps)
     recorded_reasons = [h[4] for h in history]
-    assert set(recorded_reasons) == set(reasons), f"All reasons should be present. Got {recorded_reasons}"
+    assert set(recorded_reasons) == set(reasons), (
+        f"All reasons should be present. Got {recorded_reasons}"
+    )
+
+
 def test_password_history_retention_limit(test_db):
     """Test that history respects max_versions limit."""
     # Set retention limit to 3
@@ -153,7 +162,9 @@ def test_password_history_retention_limit(test_db):
     for i in range(5):
         new_password = f"Password_{i}"
         new_encrypted = encrypt_password(new_password)
-        update_password(entry_id, encrypted_password=new_encrypted, rotation_reason="manual")
+        update_password(
+            entry_id, encrypted_password=new_encrypted, rotation_reason="manual"
+        )
 
     # Check history
     history = get_password_history(entry_id)
@@ -195,7 +206,9 @@ def test_get_all_password_history(test_db):
         entry_id = entry[0]
         new_password = f"Updated_{entry_id}"
         new_encrypted = encrypt_password(new_password)
-        update_password(entry_id, encrypted_password=new_encrypted, rotation_reason="manual")
+        update_password(
+            entry_id, encrypted_password=new_encrypted, rotation_reason="manual"
+        )
 
     # Get all history
     all_history = get_all_password_history(limit=50)
@@ -224,7 +237,9 @@ def test_delete_password_history(test_db):
     for i in range(3):
         new_password = f"Password_{i}"
         new_encrypted = encrypt_password(new_password)
-        update_password(entry_id, encrypted_password=new_encrypted, rotation_reason="manual")
+        update_password(
+            entry_id, encrypted_password=new_encrypted, rotation_reason="manual"
+        )
 
     # Verify history exists
     history = get_password_history(entry_id)
@@ -258,7 +273,9 @@ def test_password_history_with_zero_max_versions(test_db):
         new_encrypted = encrypt_password(new_password)
         # Ensure config is still set to 0
         config.update_settings({"password_history": {"max_versions": 0}})
-        update_password(entry_id, encrypted_password=new_encrypted, rotation_reason="manual")
+        update_password(
+            entry_id, encrypted_password=new_encrypted, rotation_reason="manual"
+        )
 
     # Check history - with max_versions=0, all entries should be kept
     history = get_password_history(entry_id, limit=20)  # Use higher limit to see all
@@ -267,6 +284,8 @@ def test_password_history_with_zero_max_versions(test_db):
     assert len(history) >= 10, f"Should keep many versions (got {len(history)})"
     # Since we query with limit=20 and created 15, we should see all 15
     assert len(history) == num_updates, f"Should keep all {num_updates} versions"
+
+
 def test_password_history_limit_parameter(test_db):
     """Test that get_password_history respects limit parameter."""
     # Add initial password
@@ -281,7 +300,9 @@ def test_password_history_limit_parameter(test_db):
     for i in range(10):
         new_password = f"Password_{i}"
         new_encrypted = encrypt_password(new_password)
-        update_password(entry_id, encrypted_password=new_encrypted, rotation_reason="manual")
+        update_password(
+            entry_id, encrypted_password=new_encrypted, rotation_reason="manual"
+        )
 
     # Get limited history
     history = get_password_history(entry_id, limit=5)

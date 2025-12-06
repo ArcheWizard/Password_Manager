@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import threading
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 from secure_password_manager.utils.logger import log_info, log_warning
 from secure_password_manager.utils.paths import get_data_dir
@@ -21,6 +21,7 @@ from secure_password_manager.utils.paths import get_data_dir
 
 class ApprovalDecision(Enum):
     """Approval decision types."""
+
     APPROVED = "approved"
     DENIED = "denied"
     TIMEOUT = "timeout"
@@ -29,6 +30,7 @@ class ApprovalDecision(Enum):
 @dataclass
 class ApprovalRequest:
     """Represents a credential access request awaiting approval."""
+
     request_id: str
     origin: str
     browser: str
@@ -45,6 +47,7 @@ class ApprovalRequest:
 @dataclass
 class ApprovalResponse:
     """Represents the response to an approval request."""
+
     request_id: str
     decision: ApprovalDecision
     remember: bool = False
@@ -70,7 +73,7 @@ class ApprovalStore:
             return
 
         try:
-            with open(self.path, 'r', encoding='utf-8') as f:
+            with open(self.path, encoding="utf-8") as f:
                 self._approvals = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
             log_warning(f"Failed to load approval store: {e}")
@@ -80,7 +83,7 @@ class ApprovalStore:
         """Save approvals to disk."""
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.path, 'w', encoding='utf-8') as f:
+            with open(self.path, "w", encoding="utf-8") as f:
                 json.dump(self._approvals, f, indent=2)
         except OSError as e:
             log_warning(f"Failed to save approval store: {e}")
@@ -148,9 +151,13 @@ class ApprovalManager:
         self._pending: Dict[str, ApprovalRequest] = {}
         self._responses: Dict[str, ApprovalResponse] = {}
         self._lock = threading.Lock()
-        self._prompt_handler: Optional[Callable[[ApprovalRequest], ApprovalResponse]] = None
+        self._prompt_handler: Optional[
+            Callable[[ApprovalRequest], ApprovalResponse]
+        ] = None
 
-    def set_prompt_handler(self, handler: Callable[[ApprovalRequest], ApprovalResponse]) -> None:
+    def set_prompt_handler(
+        self, handler: Callable[[ApprovalRequest], ApprovalResponse]
+    ) -> None:
         """Set the function that prompts the user for approval."""
         self._prompt_handler = handler
 
@@ -204,7 +211,7 @@ class ApprovalManager:
                     self._store.remember_approval(
                         origin,
                         fingerprint,
-                        response.decision == ApprovalDecision.APPROVED
+                        response.decision == ApprovalDecision.APPROVED,
                     )
 
                 with self._lock:
@@ -258,7 +265,7 @@ class ApprovalManager:
                 self._store.remember_approval(
                     request.origin,
                     request.fingerprint,
-                    decision == ApprovalDecision.APPROVED
+                    decision == ApprovalDecision.APPROVED,
                 )
 
             self._responses[request_id] = response
@@ -278,8 +285,7 @@ class ApprovalManager:
 
         with self._lock:
             to_remove = [
-                rid for rid, resp in self._responses.items()
-                if resp.timestamp < cutoff
+                rid for rid, resp in self._responses.items() if resp.timestamp < cutoff
             ]
             for rid in to_remove:
                 del self._responses[rid]

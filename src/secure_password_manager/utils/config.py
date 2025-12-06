@@ -48,11 +48,7 @@ def _get_settings_path() -> Path:
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively merge ``override`` into ``base`` (mutating and returning ``base``)."""
     for key, value in override.items():
-        if (
-            key in base
-            and isinstance(base[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
             _deep_merge(base[key], value)
         else:
             base[key] = value
@@ -67,7 +63,7 @@ def load_settings() -> Dict[str, Any]:
         return settings
 
     try:
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             file_data = json.load(handle)
         if isinstance(file_data, dict):
             _deep_merge(settings, file_data)

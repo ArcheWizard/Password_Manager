@@ -1,9 +1,10 @@
 """Database migration utilities."""
 
 import sqlite3
-from typing import Dict, List, Callable
-from secure_password_manager.utils.paths import get_database_path
+from typing import Callable, Dict, List
+
 from secure_password_manager.utils.logger import log_info, log_warning
+from secure_password_manager.utils.paths import get_database_path
 
 
 def _get_db_file() -> str:
@@ -17,10 +18,12 @@ def get_schema_version() -> int:
     cursor = conn.cursor()
 
     # Check if metadata table exists
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT name FROM sqlite_master
         WHERE type='table' AND name='metadata'
-    """)
+    """
+    )
 
     if not cursor.fetchone():
         # No metadata table means version 0
@@ -41,18 +44,23 @@ def set_schema_version(version: int) -> None:
     cursor = conn.cursor()
 
     # Create metadata table if it doesn't exist
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS metadata (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
-    """)
+    """
+    )
 
     # Update or insert version
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT OR REPLACE INTO metadata (key, value)
         VALUES ('schema_version', ?)
-    """, (str(version),))
+    """,
+        (str(version),),
+    )
 
     conn.commit()
     conn.close()
@@ -64,7 +72,8 @@ def migration_001_add_password_history() -> None:
     cursor = conn.cursor()
 
     # Create password_history table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS password_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             password_id INTEGER NOT NULL,
@@ -74,18 +83,23 @@ def migration_001_add_password_history() -> None:
             changed_by TEXT DEFAULT 'user',
             FOREIGN KEY (password_id) REFERENCES passwords(id) ON DELETE CASCADE
         )
-    """)
+    """
+    )
 
     # Create index for faster lookups
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_password_history_password_id
         ON password_history(password_id)
-    """)
+    """
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_password_history_changed_at
         ON password_history(changed_at DESC)
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()
@@ -124,7 +138,9 @@ def run_migrations(target_version: int = None) -> Dict[str, any]:
         target_version = max_version
 
     if target_version > max_version:
-        log_warning(f"Target version {target_version} exceeds max available {max_version}")
+        log_warning(
+            f"Target version {target_version} exceeds max available {max_version}"
+        )
         target_version = max_version
 
     if current_version >= target_version:
@@ -133,7 +149,7 @@ def run_migrations(target_version: int = None) -> Dict[str, any]:
             "current_version": current_version,
             "target_version": target_version,
             "migrations_run": [],
-            "success": True
+            "success": True,
         }
 
     migrations_run = []
@@ -165,7 +181,7 @@ def run_migrations(target_version: int = None) -> Dict[str, any]:
         "target_version": target_version,
         "migrations_run": migrations_run,
         "errors": errors,
-        "success": final_version == target_version
+        "success": final_version == target_version,
     }
 
 
