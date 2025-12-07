@@ -2,7 +2,16 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
-## [1.10.0] - 2024-12-05
+## [1.10.1] - 2025-12-07
+
+### Fixed
+
+- Documentation updates and corrections
+- Minor build improvements
+
+---
+
+## [1.10.0] - 2025-12-05
 
 ### Added
 
@@ -40,7 +49,7 @@ All notable changes will be documented in this file. The format loosely follows 
 
 ---
 
-## [1.9.1] - 2024-12-05
+## [1.9.1] - 2025-12-05
 
 ### Added
 
@@ -73,7 +82,7 @@ All notable changes will be documented in this file. The format loosely follows 
 
 ---
 
-## [1.9.0] - 2024-12-05
+## [1.9.0] - 2025-12-05
 
 ### Added
 
@@ -98,7 +107,7 @@ All notable changes will be documented in this file. The format loosely follows 
 
 ---
 
-## [1.8.5] - 2024-12-05
+## [1.8.5] - 2025-12-05
 
 ### Added
 
@@ -118,7 +127,7 @@ All notable changes will be documented in this file. The format loosely follows 
 
 ---
 
-## [1.8.4] - 2024-11-18
+## [1.8.4] - 2025-11-18
 
 ### Added
 
