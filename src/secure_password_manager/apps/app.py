@@ -52,7 +52,7 @@ from secure_password_manager.utils.key_management import (
     get_key_mode,
     switch_key_mode,
 )
-from secure_password_manager.utils.logger import get_log_entries, log_info
+from secure_password_manager.utils.logger import get_log_entries, log_info, log_warning
 from secure_password_manager.utils.password_analysis import (
     evaluate_password_strength,
     generate_secure_password,
@@ -1610,7 +1610,25 @@ def login() -> bool:
         password = input("Enter master password: ")
 
         if authenticate(password):
-            # Set master password context after successful authentication
+            # Check 2FA BEFORE setting context
+            if is_2fa_enabled():
+                print_warning("Two-factor authentication is enabled.")
+                for totp_attempt in range(3):
+                    code = input("Enter 2FA code from your authenticator app: ")
+                    if verify_totp(code):
+                        print_success("2FA verified successfully!")
+                        break
+                    else:
+                        remaining = 2 - totp_attempt
+                        if remaining > 0:
+                            print_error(f"Invalid 2FA code. {remaining} attempt(s) remaining.")
+                else:
+                    # Failed all 2FA attempts
+                    print_error("Too many failed 2FA attempts. Access denied.")
+                    log_warning("Failed 2FA verification during login")
+                    return False
+
+            # Only set context after both master password AND 2FA succeed
             set_master_password_context(password)
 
             # Try to load the key to verify everything works

@@ -87,6 +87,7 @@ from secure_password_manager.utils.two_factor import (
     disable_2fa,
     is_2fa_enabled,
     setup_totp,
+    verify_totp,
 )
 
 
@@ -387,6 +388,49 @@ class PasswordManagerApp(QMainWindow):
                 return None
 
             if authenticate(password):
+                # Check 2FA BEFORE returning password
+                if is_2fa_enabled():
+                    for totp_attempt in range(3):
+                        code, ok = QInputDialog.getText(
+                            self,
+                            "Two-Factor Authentication",
+                            "Enter 2FA code from your authenticator app:",
+                            QLineEdit.Normal
+                        )
+
+                        if not ok:  # User cancelled
+                            QMessageBox.warning(
+                                self,
+                                "Login Cancelled",
+                                "2FA verification is required to login."
+                            )
+                            return None
+
+                        if verify_totp(code):
+                            QMessageBox.information(
+                                self,
+                                "Success",
+                                "Two-factor authentication verified successfully!"
+                            )
+                            return password  # Return after both checks pass
+                        else:
+                            remaining = 2 - totp_attempt
+                            if remaining > 0:
+                                QMessageBox.warning(
+                                    self,
+                                    "Invalid Code",
+                                    f"Invalid 2FA code. {remaining} attempt(s) remaining."
+                                )
+
+                    # Failed all 2FA attempts
+                    QMessageBox.critical(
+                        self,
+                        "Login Failed",
+                        "Too many failed 2FA verification attempts."
+                    )
+                    return None
+
+                # 2FA not enabled or passed - return password
                 return password
 
             if attempt < 2:
