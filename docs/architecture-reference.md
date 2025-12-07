@@ -26,8 +26,8 @@ This reference explains how Secure Password Manager is assembled, including runt
 
 | Module | Path | Responsibility |
 | --- | --- | --- |
-| CLI App | `src/secure_password_manager/apps/app.py` | Text menus, workflow orchestration, ANSI formatting. |
-| GUI App | `src/secure_password_manager/apps/gui.py` | PyQt5 interface, dialogs, tables, notifications. |
+| CLI App | `src/secure_password_manager/apps/app.py` | Text menus, workflow orchestration, ANSI formatting, approval prompt handler. |
+| GUI App | `src/secure_password_manager/apps/gui.py` | PyQt5 interface, dialogs, tables, notifications, approval modal handler. |
 | Authentication | `src/secure_password_manager/utils/auth.py` | Master password setup/verification, login rate limiting. |
 | Crypto | `src/secure_password_manager/utils/crypto.py` | Key generation, Fernet encryption/decryption, PBKDF2 derivation, key protection. |
 | Key Management | `src/secure_password_manager/utils/key_management.py` | Mode switching (file-key ⇌ password-derived), KDF benchmarking, parameter tuning. |
@@ -39,9 +39,11 @@ This reference explains how Secure Password Manager is assembled, including runt
 | Backup | `src/secure_password_manager/utils/backup.py` | Full backups, encrypted exports, restore routines. |
 | Logger | `src/secure_password_manager/utils/logger.py` | Structured logging, log rotation, CLI/GUI friendly formatting. |
 | Clipboard Manager | `src/secure_password_manager/utils/clipboard_manager.py` | Secure clipboard operations with automatic clearing via background timers. |
+| Approval Manager | `src/secure_password_manager/utils/approval_manager.py` | Desktop approval system for browser bridge with persistent store and audit logging. |
 | Paths | `src/secure_password_manager/utils/paths.py` | XDG Base Directory support, file path resolution, dev vs. production modes. |
+| Config | `src/secure_password_manager/utils/config.py` | Settings management with nested dictionary structure and defaults. |
 | UI Helpers | `src/secure_password_manager/utils/ui.py`, `interactive.py` | Reusable menu prompts, table renderers, clipboard helpers. |
-| Browser Bridge Service | `src/secure_password_manager/services/browser_bridge.py` | FastAPI/uvicorn server issuing pairing codes and scoped tokens for browser extensions (v1.8.4). |
+| Browser Bridge Service | `src/secure_password_manager/services/browser_bridge.py` | FastAPI/uvicorn server with pairing, token management, and approval-protected credential access. |
 
 ## Data Flow
 
@@ -71,7 +73,7 @@ This reference explains how Secure Password Manager is assembled, including runt
 
 ## Extension Points
 
-1. **Browser Bridge**: Local RPC server is implemented (v1.8.4). FastAPI service reuses authentication, crypto, and audit services. Browser extensions are in development. See `browser-extension-ipc.md`.
+1. **Browser Bridge**: Local RPC server is fully implemented with desktop approval prompts. FastAPI service reuses authentication, crypto, and audit services. Official Chrome and Firefox extensions are available. See `browser-extension-ipc.md`.
 2. **Background Jobs**: Scheduler/worker design will call into database/audit helpers; architecture is outlined in `background-jobs-observability.md`.
 3. **Plugin API**: Future entry points will expose hooks for custom breach providers or policy engines via Python entry points.
 

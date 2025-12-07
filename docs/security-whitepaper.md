@@ -22,7 +22,7 @@ This document describes the security goals, threat model, cryptographic design, 
 | Offline attacker with database file but no key | Strong KDF + envelope encryption; optional KEK derived from master password only. |
 | Compromised local account while vault unlocked | Auto-lock timers, clipboard clearing, minimal plaintext exposure. |
 | Malicious breach-check service | k-anonymity queries (first 5 SHA-1 chars), offline dictionary support, request throttling. |
-| Rogue browser extension | Token-based IPC, per-origin allowlists, mandatory user approval prompts (v1.9.1+), rate limiting. |
+| Rogue browser extension | Token-based IPC, per-origin allowlists, mandatory user approval prompts, rate limiting. |
 | Tampered backups | HMAC-SHA256 integrity envelopes, manifest hashes, restore-time verification. |
 
 ## Cryptography
@@ -51,8 +51,9 @@ This document describes the security goals, threat model, cryptographic design, 
 ## Network Interactions
 
 - Breach checks call Have I Been Pwned range API using first five SHA-1 characters of the password hash, preserving anonymity.
-- Browser Bridge (v1.9.1+) runs a FastAPI server on `127.0.0.1:43110`, issuing short-lived tokens after an in-app pairing ceremony; no traffic leaves the host.
-- **Desktop Approval Prompts (v1.9.1)**: Every credential access request from browser extensions triggers an explicit user approval prompt showing origin, browser, and entry details. Users can approve once or remember the decision for trusted domains. Approval decisions are persisted and logged for audit trails.
+- Browser Bridge runs a FastAPI server on `127.0.0.1:43110`, issuing short-lived tokens after an in-app pairing ceremony; no traffic leaves the host.
+- **Desktop Approval Prompts**: Every credential access request from browser extensions triggers an explicit user approval prompt showing origin, browser, and entry details. Users can approve once or remember the decision for trusted domains. Approval decisions are persisted and logged for audit trails.
+- **Browser Extensions**: Official Chrome (Manifest v3) and Firefox (Manifest v2) extensions provide secure credential autofill with visual indicators and multi-credential selection.
 - Proxy settings and offline breach dictionaries are supported to minimize direct outbound calls.
 
 ## Logging & Telemetry

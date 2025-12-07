@@ -1,19 +1,18 @@
 # 🔐 Secure Password Manager
 
-A cross-platform vault that stores, audits, and rotates secrets entirely on your device. The application ships with both a rich CLI and a PyQt5 GUI, leverages modern cryptography, and is designed to integrate with upcoming browser extensions and automation services.
+A cross-platform vault that stores, audits, and rotates secrets entirely on your device. The application ships with both a rich CLI and a PyQt5 GUI, leverages modern cryptography, and includes official browser extensions for secure credential autofill.
 
 ## Feature Highlights
 
 - **End-to-end encryption** with Fernet (AES-128 + HMAC) backed by PBKDF2-derived master keys and optional Argon2id/scrypt migration hooks.
 - **Dual interfaces**: interactive terminal workflow (`password-manager`) and a full desktop client (`password-manager-gui`).
+- **Browser extensions** for Chrome/Chromium (Manifest v3) and Firefox (Manifest v2) with secure pairing, credential autofill, and credential saving.
+- **Desktop approval system** requiring explicit user approval for browser extension credential queries, with "remember this domain" feature and comprehensive audit logging.
+- **Browser bridge** powered by FastAPI + uvicorn, issuing short-lived tokens to paired browser extensions over a localhost RPC channel with mandatory desktop approval prompts.
 - **Security automation** including strength analysis, breach checks, duplicate detection, expirations, and actionable remediation guidance.
 - **Password history** tracking all password changes with rotation metadata (manual, expiry, breach, strength), configurable retention, and detailed audit trails.
 - **Backup, restore, and export** pipelines with integrity protection, versioned envelopes, and disaster-recovery tooling.
 - **Two-factor authentication (TOTP)** with automatic clipboard clearing (configurable timeout, default 25 seconds) and planned OS-keyring / hardware token support.
-- **Extensible architecture** intended for browser auto-fill bridges, background jobs, and plugin-defined workflows.
-- **Browser bridge** powered by FastAPI + uvicorn, issuing short-lived tokens to paired browser extensions over a localhost RPC channel, with desktop approval prompts for all credential access (v1.9.1+).
-- **Browser extensions** for Chrome/Chromium (Manifest v3) and Firefox (Manifest v2) with secure pairing, credential autofill, and save prompts (v1.10.0).
-- **Desktop approval system** requiring explicit user approval for browser extension credential queries, with "remember this domain" feature and comprehensive audit logging (v1.9.1).
 - **Flexible key management** with a switchable master-password-derived mode, file-key fallback, and an interactive PBKDF2 benchmarking wizard that tunes iterations (default 390,000) and salt size per device.
 
 ## Quickstart
@@ -43,7 +42,7 @@ password-manager-gui
 - **Apply new parameters**: When accepting the recommendation, the tool re-hashes `auth.json`, re-wraps any protected `secret.key`, and—if password-derived mode is active—re-encrypts every entry so the new parameters take effect immediately.
 - **Configuration storage**: Selected mode, iteration targets, and salt metadata live in `settings.json` and `crypto.salt`. Backups include these files so restored environments preserve your hardening choices.
 
-## Browser Extensions (v1.10.0)
+## Browser Extensions
 
 Official browser extensions for **Chrome/Chromium** and **Firefox** provide seamless credential autofill and secure credential storage directly from your web browser.
 
@@ -53,6 +52,8 @@ Official browser extensions for **Chrome/Chromium** and **Firefox** provide seam
 - **Auto-Fill**: Click lock icon on password fields to fill credentials
 - **Save Credentials**: Automatically prompts to save new logins
 - **Desktop Approval**: All credential access requires explicit approval in desktop app
+- **Multi-Credential Selection**: Choose from multiple entries when available
+- **Token-Based Auth**: Secure communication with browser fingerprinting
 - **Multi-Browser**: Chrome (Manifest v3) and Firefox (Manifest v2) support
 
 ### Installation
@@ -60,12 +61,10 @@ Official browser extensions for **Chrome/Chromium** and **Firefox** provide seam
 **Build and Load Extension**:
 
 ```bash
-
 cd browser-extension
 ./build-chrome.sh      # For Chrome/Chromium
 ./build-firefox.sh     # For Firefox
 ./build-all.sh         # Build both
-
 ```
 
 **Chrome**: Load unpacked extension from `browser-extension/build/chrome/` at `chrome://extensions/`
@@ -74,10 +73,12 @@ cd browser-extension
 
 ### Usage
 
-1. **Start Desktop App**: Launch `password-manager` or `password-manager-gui`
+1. **Enable Browser Bridge**: In desktop app, enable Browser Bridge in Settings
 2. **Pair Extension**: Click extension icon → "Pair with Desktop App" → Enter 6-digit code from desktop
 3. **Auto-Fill**: Visit login page → Click 🔒 lock icon on password field → Approve in desktop app
 4. **Save**: Fill form manually → Submit → Click "Save" in save prompt → Approve in desktop app
+
+See `browser-extension/README.md` for detailed instructions.
 
 **See [`browser-extension/README.md`](browser-extension/README.md) for full documentation, troubleshooting, and API details.**
 

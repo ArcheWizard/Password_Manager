@@ -1,6 +1,6 @@
 # Browser Extension & IPC Specification
 
-Defines the contract between the desktop application and companion browser extensions (Chromium/Firefox). This document focuses on the planned local RPC service; no external cloud component is assumed.
+Defines the contract between the desktop application and companion browser extensions (Chromium/Firefox). The local RPC service is fully implemented with official Chrome and Firefox extensions available; no external cloud component is used.
 
 ## Goals
 
@@ -18,7 +18,7 @@ Browser Extension  <-->  Local RPC Service (127.0.0.1:43110)  <-->  Core Service
 - Extensions authenticate once per session using a pairing code displayed in the desktop app.
 - Tokens expire quickly and are scoped per browser profile.
 
-### Implementation Status (v1.9.1)
+### Implementation Status (v1.10.0)
 
 - `secure_password_manager/services/browser_bridge.py` hosts a FastAPI/uvicorn server embedded in the desktop app.
 - The service is disabled by default; enable it via CLI `Settings > Browser Bridge` or via the GUI Settings tab.
@@ -28,14 +28,15 @@ Browser Extension  <-->  Local RPC Service (127.0.0.1:43110)  <-->  Core Service
 - Token TTL is configurable via `browser_bridge.token_ttl_hours` in settings (default 24 hours).
 - Implemented endpoints: `/v1/status`, `/v1/pair`, `/v1/credentials/query`, `/v1/credentials/store`, `/v1/audit/report`, `/v1/clipboard/clear`.
 - All endpoints except `/v1/status` and `/v1/pair` require bearer token authentication.
-- **NEW (v1.9.1)**: Desktop approval prompts now protect credential access - users must explicitly approve each origin before credentials are returned.
-- **NEW (v1.9.1)**: "Remember this domain" feature allows users to auto-approve trusted origins for future requests.
-- **NEW (v1.9.1)**: Approval decisions are persisted in `approval_store.json` and can be managed from settings.
-- Upcoming work: browser extension implementation, encrypted payload negotiation, TLS and certificate pinning, domain-socket transports.
+- **Desktop approval prompts** protect credential access - users must explicitly approve each origin before credentials are returned.
+- **"Remember this domain" feature** allows users to auto-approve trusted origins for future requests.
+- **Approval decisions** are persisted in `approval_store.json` and can be managed from settings.
+- **Browser extensions** for Chrome (Manifest v3) and Firefox (Manifest v2) are fully implemented with auto-fill, credential saving, and secure pairing.
+- Upcoming work: encrypted payload negotiation, TLS and certificate pinning, domain-socket transports.
 
 ## Transport & Protocol
 
-- **Transport**: Current alpha uses HTTP/1.1 on `127.0.0.1` without TLS (traffic stays local). TLS + certificate pinning and domain socket transports are planned.
+- **Transport**: Current implementation uses HTTP/1.1 on `127.0.0.1` without TLS (traffic stays local). TLS + certificate pinning and domain socket transports are planned for future releases.
 - **Serialization**: JSON for request/response bodies. Future versions may support Protocol Buffers.
 - **Port**: Dynamically assigned; default 43110. Advertised via mDNS/Bonjour for multi-device discovery (optional).
 
@@ -87,13 +88,14 @@ Response:
 }
 ```
 
-**NEW (v1.9.1)**: Before returning credentials, the desktop app prompts the user for approval:
+Before returning credentials, the desktop app prompts the user for approval:
 
-- CLI mode displays an interactive prompt with origin, browser, and entry count details
+- CLI mode displays an interactive prompt with origin, browser, and entry count details with color-coded options
 - GUI mode shows a modal dialog with approval/deny buttons and a "Remember this domain" checkbox
-- If the user approves, credentials are returned; if denied or timeout occurs, an empty response or error is returned
+- If the user approves, credentials are returned; if denied or timeout occurs, an HTTP 403 error is returned
 - Remembered approvals are stored in `approval_store.json` and automatically approved for future requests
-- Approval decisions are logged in the audit trail with origin, browser, and decision details
+- Approval decisions are logged in the audit trail with origin, browser, fingerprint, and decision details
+- Users can manage remembered approvals in Settings (revoke, clear all)
 
 `POST /v1/credentials/store`
 
@@ -107,16 +109,31 @@ Response:
 }
 ```
 
-Desktop app decrypts payload, performs policy checks, and stores entry. Conflicts prompt the user for merge/overwrite choices.
+Desktop app decrypts payload, performs policy checks, prompts user for approval, and stores entry. Conflicts prompt the user for merge/overwrite choices.
 
 ## Security Requirements
 
-- **User approval (v1.9.1)**: Every credential access request triggers a desktop approval prompt unless the origin is pre-approved.
-- **Remembered approvals**: Users can choose to remember approval decisions for trusted origins; stored in `approval_store.json`.
-- Tokens scoped by origin: extension must request site-specific approvals.
-- Rate limiting: max 5 credential pulls per second per origin.
-- Audit logging: every API call logged with token ID hash, action result, and approval decision.
-- User presence: desktop confirmation required for all credential access (auto-approved for remembered origins).
+- **User approval**: Every credential access request triggers a desktop approval prompt unless the origin is pre-approved.
+- **Remembered approvals**: Users can choose to remember approval decisions for trusted origins; stored in `approval_store.json` with audit logging.
+- **Tokens scoped by origin**: Extension must request site-specific approvals; credentials filtered by origin.
+- **Browser fingerprinting**: Tokens are bound to browser fingerprints to prevent cross-browser theft.
+- **Rate limiting**: Max 5 credential pulls per second per origin to prevent abuse.
+- **Audit logging**: Every API call logged with token ID hash, action result, approval decision, and origin.
+- **User presence**: Desktop confirmation required for all credential access (auto-approved for remembered origins).
+- **Localhost only**: Service binds to 127.0.0.1:43110 (no external network exposure).
+
+## Browser Extensions
+
+Official extensions are available for Chrome/Chromium (Manifest v3) and Firefox (Manifest v2):
+
+- **Auto-Fill**: Click lock icon (🔒) on password fields to trigger credential query with desktop approval
+- **Multi-Credential Selection**: Modal appears when multiple entries match the origin
+- **Credential Saving**: Automatic save prompts on form submission with desktop approval required
+- **Secure Pairing**: 6-digit codes with 120-second expiration window
+- **Token Management**: Tokens expire after 24 hours (configurable) with automatic re-pairing prompts
+- **Visual Indicators**: Lock icons on password fields, status indicator in popup
+
+Build and installation instructions in `browser-extension/README.md`.
 
 ## Versioning & Compatibility
 

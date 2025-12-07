@@ -2,26 +2,36 @@
 
 Strategic initiatives for upcoming releases. Organized by timeframe; actual delivery may shift based on user feedback.
 
+## Completed (v1.10.0 and earlier)
+
+- ✅ **Key Management Upgrades**: Master-password-derived mode with CLI/GUI switching and full vault re-encryption
+- ✅ **KDF Tuning UI**: PBKDF2 benchmarking wizard with iteration and salt size tuning
+- ✅ **Browser Extension Bridge**: FastAPI-based local RPC service with pairing codes and token management
+- ✅ **Desktop Approval Prompts**: User approval required for all credential access with remember-this-domain functionality
+- ✅ **Browser Extensions**: Chrome (Manifest v3) and Firefox (Manifest v2) extensions with auto-fill and credential saving
+- ✅ **Clipboard Auto-Clear**: Configurable timers across CLI/GUI (default 25 seconds)
+- ✅ **Password History**: Full rotation tracking with metadata (manual, expiry, breach, strength)
+- ✅ **Comprehensive Testing**: Browser bridge, approval system, and integration test coverage
+
 ## Near Term (0–3 months)
 
-- **Key Management Upgrades**
-  - ✅ Offer master-password-derived mode (no `secret.key`) with CLI/GUI switching and full vault re-encryption.
-  - ✅ Surface KDF tuning UI (iterations, salt size benchmarking wizard) across both interfaces.
-- **Browser Extension Bridge**
-  - ✅ FastAPI-based local RPC service with pairing codes, CLI/GUI toggles, and token persistence.
-  - ✅ Desktop approval prompts for credential access with remember-this-domain functionality.
-  - ✅ Ship Chromium/Firefox extension prototype with auto-fill and credential saving (v1.10.0).
-  - Add TLS support with certificate pinning for localhost connections.
+- **Browser Extension Enhancements**
+  - Add TLS support with certificate pinning for localhost connections
+  - Encrypted payload negotiation for added security
+  - Domain-socket transports for alternative IPC
+  - Browser extension publishing to Chrome Web Store and Firefox Add-ons
 - **UX Enhancements**
-  - ✅ Clipboard auto-clear timers across CLI/GUI.
-  - ✅ Password history with rotation metadata.
-  - Category manager with colors/icons and persistent filters.
+  - Category manager with colors/icons and persistent filters
+  - Enhanced password generator UI with pattern-based generation
+  - Bulk operations (select multiple entries for rotation/deletion)
 - **Security Audit Enhancements**
-  - Parallelized breach checks with offline dictionary update packs.
-  - Remediation actions (bulk rotate, notify).
+  - Parallelized breach checks with offline dictionary update packs
+  - Remediation actions (bulk rotate, notify)
+  - Security score trending and historical analysis
 - **Test & CI Coverage**
-  - Achieve ≥90% coverage with branch protection.
-  - Add pytest-qt smoke suite and coverage reporting in CI.
+  - Achieve ≥90% coverage with branch protection
+  - Add pytest-qt smoke suite and coverage reporting in CI
+  - Automated release pipeline with version management
 
 ## Mid Term (3–9 months)
 

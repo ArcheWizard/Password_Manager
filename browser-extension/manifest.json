@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Secure Password Manager",
-  "version": "0.1.0",
+  "version": "1.10.0",
   "description": "Browser extension for Secure Password Manager - secure credential autofill and management",
   "permissions": [
     "storage",

@@ -2,11 +2,11 @@
 
 ## Version
 
-**v1.9.1** - Released 2024-12-05
+**v1.10.0** - Browser extension integration with desktop approval system
 
 ## Overview
 
-Implemented comprehensive desktop approval prompts for browser extension credential access, addressing the critical security threat of rogue browser extensions accessing credentials without explicit user consent.
+Implemented comprehensive desktop approval prompts for browser extension credential access, addressing the critical security threat of rogue browser extensions accessing credentials without explicit user consent. This feature is now production-ready and integrated with fully functional Chrome and Firefox browser extensions.
 
 ## Features Implemented
 
@@ -108,10 +108,11 @@ Implemented comprehensive desktop approval prompts for browser extension credent
 
 ### 1. `browser-extension-ipc.md`
 
-- Updated implementation status to v1.9.1
+- Updated implementation status to v1.10.0
 - Added approval prompt details to credentials query endpoint
 - Updated security requirements with user approval details
 - Documented remember-this-domain functionality
+- Added browser extensions section with implementation details
 
 ### 2. `security-whitepaper.md`
 
@@ -122,17 +123,18 @@ Implemented comprehensive desktop approval prompts for browser extension credent
 ### 3. `roadmap.md`
 
 - Marked desktop approval prompts as completed (✅)
-- Next steps: Browser extensions, then TLS support
+- Marked browser extensions as completed (✅)
+- Moved to "Completed (v1.10.0 and earlier)" section
 
 ### 4. `CHANGELOG.md`
 
-- Added v1.9.1 section with all new features
-- Documented security improvements
-- Listed all approval-related changes
+- Updated to v1.10.0 with all browser extension features
+- Documented approval system integration
+- Listed all extension-related changes
 
-### 5. `VERSION.txt`
+### 5. `VERSION.txt` and `__init__.py`
 
-- Updated to 1.9.1
+- Updated to 1.10.0
 
 ## Files Created
 
@@ -238,11 +240,12 @@ No database migration required. The approval system uses a separate JSON file fo
 
 ## Next Steps
 
-1. **Browser Extensions**: Implement Chromium and Firefox extensions that use the approval system
+1. **Browser Extension Publishing**: Submit extensions to Chrome Web Store and Firefox Add-ons for public distribution
 2. **TLS Support**: Add certificate pinning for localhost connections
-3. **Settings UI**: Add GUI/CLI interface to manage remembered approvals
+3. **Settings UI Enhancements**: Add GUI/CLI interface to manage remembered approvals (already partially implemented)
 4. **Audit Report**: Include approval history in security audit reports
 5. **Expiry**: Optional expiry timestamps for remembered approvals
+6. **Domain Socket Transport**: Alternative IPC mechanism for enhanced security
 
 ## Performance Impact
 
@@ -268,4 +271,4 @@ No database migration required. The approval system uses a separate JSON file fo
 
 ## Conclusion
 
-The desktop approval prompts feature (v1.9.1) successfully implements a critical security control for browser extension integration. With 21 comprehensive tests, full documentation coverage, and zero regressions, the feature is production-ready and significantly enhances the security posture of the password manager's browser bridge functionality.
+The desktop approval prompts feature successfully implements a critical security control for browser extension integration. Combined with the fully functional Chrome and Firefox browser extensions released in v1.10.0, users can now securely auto-fill and save credentials from their browsers with explicit desktop approval for every credential access. With 21 comprehensive tests for the approval system, 70+ total tests passing, full documentation coverage, and zero regressions, the feature set is production-ready and significantly enhances the security posture of the password manager's browser bridge functionality.

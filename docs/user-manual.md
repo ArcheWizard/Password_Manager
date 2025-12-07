@@ -14,7 +14,8 @@ This manual covers everyday workflows for individuals and teams operating Secure
 - **Master Password**: Primary secret unlocking the vault.
 - **Entry**: A row containing website/app identifier, username, password, notes, category, and metadata (created_at, updated_at, expiry_date, favorite).
 - **Security Audit**: Automated analysis detecting weak, reused, expired, or breached passwords.
-- **Browser Bridge**: Local FastAPI service (v1.8.4) that enables browser extension integration via token-based authentication.
+- **Browser Bridge**: Local FastAPI service that enables browser extension integration via token-based authentication with desktop approval prompts.
+- **Browser Extension**: Official Chrome and Firefox extensions for secure credential autofill and management.
 - **Key Mode**: File-key (default, uses `secret.key`) or password-derived (regenerates key from master password on each unlock).
 
 ## CLI Workflow (`password-manager`)
@@ -51,13 +52,45 @@ password-manager
    password-manager --add --website example.com --username alice
    ```
 
-### Browser Bridge (Experimental)
+### Browser Bridge & Browser Extensions
+
+The Browser Bridge enables secure communication between the desktop application and official browser extensions for Chrome/Chromium and Firefox.
+
+#### Desktop Configuration
 
 - **Enable/disable**: CLI `Settings > Browser Bridge` or GUI `Settings` tab → "Browser Bridge" panel. The toggle controls whether the FastAPI service starts automatically on launch.
 - **Start/stop service**: Both interfaces expose a dedicated button; the service binds to `http://127.0.0.1:43110` by default (configurable in `settings.json`).
 - **Pair extensions**: Generate a 6-digit pairing code from the same menu. Codes expire after two minutes; share them directly with the requesting extension prompt.
 - **Token management**: View or revoke issued tokens at any time. Tokens are stored in `browser_bridge_tokens.json` under the data directory, and revocation immediately severs the extension's access.
+- **Approval management**: Review and manage remembered approval decisions in Settings. Revoke trusted origins at any time.
 - **Security reminder**: The service only listens on localhost, but you should stop or disable it when not using browser automation.
+
+#### Browser Extension Setup
+
+1. **Build Extension**: Navigate to `browser-extension/` and run `./build-chrome.sh` or `./build-firefox.sh`
+2. **Load Extension**:
+   - **Chrome**: Go to `chrome://extensions/`, enable Developer mode, click "Load unpacked", select `build/chrome/`
+   - **Firefox**: Go to `about:debugging`, click "This Firefox", click "Load Temporary Add-on", select `build/firefox/manifest.json`
+3. **Pair Extension**: Click extension icon → "Pair with Desktop App" → Enter 6-digit code displayed in desktop app
+
+#### Using Browser Extension
+
+- **Auto-Fill**: Visit login page → Click 🔒 lock icon on password field → Approve access in desktop app → Select credential if multiple matches
+- **Save New Credentials**: Fill login form manually → Submit → Extension shows save prompt → Click "Save" → Approve in desktop app
+- **Manage Approvals**: When prompted, choose:
+  - **Approve Once**: Grant access for this request only
+  - **Remember & Approve**: Auto-approve this origin for future requests
+  - **Deny Once**: Reject this request
+  - **Remember & Deny**: Block this origin permanently (revocable in Settings)
+- **Token Expiration**: Tokens expire after 24 hours (configurable) or 30 days after pairing. Extension will prompt for re-pairing when expired.
+
+#### Security Features
+
+- **Desktop Approval Prompts**: Every credential access request requires explicit user approval showing origin, browser, and entry details
+- **Browser Fingerprinting**: Prevents token theft across different browsers
+- **Origin-Based Isolation**: Credentials are filtered by origin for security
+- **Audit Logging**: All approval decisions and credential access are logged
+- **Token Revocation**: Instantly revoke extension access from desktop app
 
 ## Key Management & KDF Tuning
 

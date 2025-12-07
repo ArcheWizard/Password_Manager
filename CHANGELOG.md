@@ -29,7 +29,7 @@ All notable changes will be documented in this file. The format loosely follows 
 - Browser fingerprinting prevents token theft across different browsers.
 - Localhost-only communication (HTTP on 127.0.0.1:43110).
 - Token storage in browser's encrypted storage (`chrome.storage.local`).
-- All credential access requires desktop approval (leverages v1.9.1 approval system).
+- All credential access requires desktop approval (leverages approval system).
 - Audit trail for all extension credential queries.
 
 ### Notes

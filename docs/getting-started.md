@@ -69,10 +69,20 @@ This guide walks through installing Secure Password Manager, initializing a vaul
 - Run the CLI and add a password entry.
 - Launch the GUI and confirm the entry appears in the table.
 - Perform a security audit via CLI option `Security Audit > Full Audit`.
+- Test browser extension integration (optional):
+  - Enable Browser Bridge in Settings
+  - Build and load browser extension
+  - Test pairing and auto-fill functionality
 - Execute the automated test suite:
 
   ```bash
   pytest -q
+  ```
+
+  With coverage:
+
+  ```bash
+  pytest --cov=secure_password_manager --cov-report=term --cov-report=html
   ```
 
 ## Directory Layout After Setup

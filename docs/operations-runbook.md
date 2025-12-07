@@ -14,8 +14,9 @@ Files follow XDG Base Directory specification. In development mode, all files ar
 
 | File | Location Type | Description |
 | --- | --- | --- |
-| `passwords.db` | Data | Encrypted SQLite database. |
+| `passwords.db` | Data | Encrypted SQLite database with schema version tracking. |
 | `secret.key` | Data | Encrypted master key (only in file-key mode). |
+| `secret.key.enc` | Data | Password-protected master key (when key protection enabled). |
 | `crypto.salt` | Data | KDF salt and parameters (JSON). |
 | `auth.json` | Data | Master password hash and authentication metadata. |
 | `totp_config.json` | Data | TOTP configuration (if 2FA enabled). |
@@ -23,20 +24,25 @@ Files follow XDG Base Directory specification. In development mode, all files ar
 | `logs/password_manager.log` | Data/logs | Application log with rotation. |
 | `breach_cache.json` | Cache | Cached HIBP prefix responses. |
 | `browser_bridge_tokens.json` | Data | Token store for paired browser extensions. |
+| `approval_store.json` | Data | Remembered approval decisions for browser origins. |
 
 ## Routine Tasks
 
 1. **Daily**
    - Verify automated backups completed.
    - Check logs for WARN/ERROR entries.
+   - Review browser bridge approval prompts for suspicious origins.
 2. **Weekly**
    - Run full security audit; export report for tracking.
    - Review open issues or vulnerability advisories.
-   - If Browser Bridge is enabled, revoke stale tokens and regenerate codes for unused browsers.
+   - If Browser Bridge is enabled, revoke stale tokens and review approval store for suspicious domains.
+   - Review password history for unusual rotation patterns.
 3. **Monthly**
    - Rotate master password if mandated.
    - Test restore process on a clean machine.
    - Update dependencies (`pip install -U -r requirements.txt`).
+   - Review KDF parameters and consider benchmarking on updated hardware.
+   - Audit remembered approval decisions and revoke untrusted origins.
 
 ## Monitoring & Alerts
 
@@ -47,7 +53,10 @@ Files follow XDG Base Directory specification. In development mode, all files ar
   - `BREACH_CHECK_ERROR`
   - `SECURITY_AUDIT_RESULT`
   - `BROWSER_BRIDGE_TOKEN_ISSUED` / `BROWSER_BRIDGE_TOKEN_REVOKED`
-- Configure alerting for repeated login failures, backup failures, or breach API outages.
+  - `APPROVAL_GRANTED` / `APPROVAL_DENIED` / `APPROVAL_REMEMBERED`
+  - `PASSWORD_ROTATED` with rotation reason (manual, expiry, breach, strength)
+- Configure alerting for repeated login failures, backup failures, breach API outages, or suspicious approval patterns.
+- Monitor `approval_store.json` for unexpected auto-approved origins.
 
 ## Browser Bridge Operations
 
