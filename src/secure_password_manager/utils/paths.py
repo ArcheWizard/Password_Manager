@@ -20,30 +20,40 @@ def get_app_name() -> str:
 
 def is_development_mode() -> bool:
     """
-    Check if running in development mode.
+    Check if running in development mode (running from source, not pip install).
 
-    Returns True if:
-    - Running from source (apps/ and utils/ exist in parent dir)
-    - .data/ directory exists in project root
+    Returns True ONLY if:
+    - Running from editable install (pip install -e .) OR
+    - Running directly from source with python -m
+    - AND .data/ directory exists in project root
+    - AND src/ or pyproject.toml exists (confirms source tree)
+
+    When installed via pip (not editable), always returns False,
+    ensuring data goes to XDG directories.
     """
-    # Get the project root
-    # When in src layout: src/secure_password_manager/utils/paths.py -> ../../.. = project root
-    # When in old layout: utils/paths.py -> .. = project root
     utils_dir = Path(__file__).parent
 
-    # Try src layout first
+    # Check if we're in site-packages (pip installed)
+    # If path contains 'site-packages', we're installed, not in dev mode
+    path_str = str(utils_dir.resolve())
+    if 'site-packages' in path_str or 'dist-packages' in path_str:
+        return False
+
+    # We're in source tree - check for development indicators
     if utils_dir.parent.name == "secure_password_manager":
         project_root = utils_dir.parent.parent.parent
     else:
         # Old layout
         project_root = utils_dir.parent
 
-    # Check if we're in the source tree
+    # Development mode ONLY if:
+    # 1. .data/ exists AND
+    # 2. We have src/ or pyproject.toml (confirms source tree)
     data_dir = project_root / ".data"
     src_dir = project_root / "src"
+    pyproject = project_root / "pyproject.toml"
 
-    # Development mode if .data exists and we have src/ or old apps/utils structure
-    return data_dir.exists() and (src_dir.exists() or (project_root / "apps").exists())
+    return data_dir.exists() and (src_dir.exists() or pyproject.exists())
 
 
 def get_project_root() -> Path:
@@ -237,6 +247,38 @@ def migrate_legacy_files() -> None:
                     print(f"✓ Migrated {old_path.name} to {new_path.parent}")
                 except Exception as e:
                     print(f"⚠ Warning: Could not migrate {old_path.name}: {e}")
+
+
+def check_legacy_data() -> bool:
+    """
+    Check for legacy .data/ directory and warn about migration.
+
+    Returns True if legacy data detected in production mode.
+    """
+    if not is_development_mode():
+        # Check for legacy data in potential project roots
+        possible_roots = [
+            Path.cwd(),  # Current directory
+            Path.home() / "Coding" / "Python" / "MyProjects" / "Password_Manager",
+            Path.home() / "Password_Manager",
+            Path.home() / "password-manager",
+        ]
+
+        for root in possible_roots:
+            legacy_data = root / ".data"
+            if legacy_data.exists() and (legacy_data / "passwords.db").exists():
+                print(f"\nWARNING: Found legacy data directory")
+                print(f"   Location: {legacy_data}")
+                print(f"\n   Your data is in development mode but you're running production mode.")
+                print(f"   This means updates via pip will appear to 'delete' your data.")
+                print(f"\n   Solution: Run the migration script:")
+                print(f"      cd {root}")
+                print(f"      python scripts/migrate_to_production.py")
+                print(f"\n   Or see: docs/getting-started.md#production-installation-via-pip")
+                print()
+                return True
+
+    return False
 
 
 def print_paths_info() -> None:

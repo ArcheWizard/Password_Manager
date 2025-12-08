@@ -37,6 +37,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "token_ttl_hours": 24,
         "pairing_window_seconds": 120,
     },
+    "data_persistence": {
+        "remove_on_uninstall": False,  # Keep data safe by default
+        "uninstall_warning_shown": False,
+    },
 }
 
 

@@ -1148,6 +1148,7 @@ def settings_menu() -> None:
     print_menu_option("5", "Clear logs")
     print_menu_option("6", "Two-Factor Authentication")
     print_menu_option("7", "Browser Bridge (Experimental)")
+    print_menu_option("8", "Data Persistence Settings")
     print_menu_option("0", "Back to main menu")
 
     choice = input(f"{Fore.YELLOW}Select an option: ")
@@ -1255,6 +1256,82 @@ def settings_menu() -> None:
 
     elif choice == "7":
         browser_bridge_menu()
+
+    elif choice == "8":
+        data_persistence_menu()
+
+
+def data_persistence_menu() -> None:
+    """Configure data persistence settings."""
+    from secure_password_manager.utils import paths
+
+    print_header("Data Persistence Settings")
+
+    settings = config.load_settings()
+    remove_on_uninstall = settings.get("data_persistence", {}).get("remove_on_uninstall", False)
+
+    print(f"\n{Fore.CYAN}Current Settings:{Style.RESET_ALL}")
+    print(f"  Remove data on uninstall: {Fore.RED if remove_on_uninstall else Fore.GREEN}{'ENABLED' if remove_on_uninstall else 'DISABLED (Safe)'}{Style.RESET_ALL}")
+
+    print(f"\n{Fore.CYAN}Data Locations:{Style.RESET_ALL}")
+    print(f"  Data:   {paths.get_data_dir()}")
+    print(f"  Config: {paths.get_config_dir()}")
+    print(f"  Cache:  {paths.get_cache_dir()}")
+
+    print(f"\n{Fore.YELLOW}What this means:{Style.RESET_ALL}")
+    if remove_on_uninstall:
+        print(f"  {Fore.RED}⚠️  Your passwords and data WILL be deleted when you uninstall.{Style.RESET_ALL}")
+    else:
+        print(f"  {Fore.GREEN}✓ Your passwords and data are SAFE - they persist through uninstalls.{Style.RESET_ALL}")
+
+    print("\nOptions:")
+    if remove_on_uninstall:
+        print_menu_option("1", "Disable data removal (RECOMMENDED - keep data safe)")
+    else:
+        print_menu_option("1", "Enable data removal on uninstall (CAUTION)")
+    print_menu_option("0", "Back to settings")
+
+    choice = input(f"{Fore.YELLOW}Select an option: ")
+
+    if choice == "1":
+        if remove_on_uninstall:
+            # Disabling - make data safe
+            config.update_settings({
+                "data_persistence": {
+                    "remove_on_uninstall": False
+                }
+            })
+            print_success("✓ Data removal DISABLED. Your data will persist through uninstalls.")
+            log_info("Data persistence setting changed: removal disabled (safe)")
+        else:
+            # Enabling - warn heavily
+            print(f"\n{Fore.RED}{'=' * 60}")
+            print("⚠️  WARNING: DATA REMOVAL ON UNINSTALL")
+            print("=" * 60)
+            print(f"{Style.RESET_ALL}")
+            print("If you enable this setting, when you run:")
+            print(f"  {Fore.YELLOW}pip uninstall secure-password-manager{Style.RESET_ALL}")
+            print("\nALL of the following will be PERMANENTLY DELETED:")
+            print(f"  {Fore.RED}✗ All your passwords and vault data")
+            print("  ✗ All encryption keys")
+            print("  ✗ All settings and configurations")
+            print("  ✗ All logs and backups")
+            print(f"  ✗ EVERYTHING in the data directories above{Style.RESET_ALL}")
+            print("\nThis CANNOT be undone!")
+            print(f"\n{Fore.YELLOW}Are you absolutely sure you want to enable data removal?{Style.RESET_ALL}")
+            confirm = input("Type 'DELETE MY DATA' to confirm: ")
+
+            if confirm == "DELETE MY DATA":
+                config.update_settings({
+                    "data_persistence": {
+                        "remove_on_uninstall": True
+                    }
+                })
+                print_warning("⚠️  Data removal ENABLED. Your data will be deleted on uninstall!")
+                print_warning("Remember to backup before uninstalling!")
+                log_info("Data persistence setting changed: removal enabled (DANGER)")
+            else:
+                print_success("Cancelled. Your data remains safe.")
 
 
 def twofa_menu() -> None:

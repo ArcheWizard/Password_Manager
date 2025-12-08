@@ -2,12 +2,48 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
-## [1.10.1] - 2025-12-07
+## [1.10.2] - 2025-12-08
+
+### Added
+
+- **Data persistence through pip updates**: User data now persists by default through pip uninstall/reinstall cycles.
+- Data persistence settings in GUI (Settings → Data Persistence) and CLI (Settings → Data Persistence Settings).
+- Optional "Remove data on uninstall" setting for users who want data cleanup on uninstall.
+- Uninstall cleanup script (`scripts/uninstall_cleanup.py`) that respects user preferences.
+- Data location display in settings showing XDG directory paths.
 
 ### Fixed
 
-- Documentation updates and corrections
-- Minor build improvements
+- **Critical**: Fixed `is_development_mode()` detection to properly differentiate pip-installed vs source execution.
+  - Now checks if running from `site-packages` or `dist-packages` to determine pip installation.
+  - Prevents pip-installed versions from incorrectly trying to use `.data/` directory.
+- Data no longer "disappears" when updating password manager via pip.
+
+### Changed
+
+- Development mode detection now checks installation location rather than just directory existence.
+- Default behavior: data persists through uninstalls (safer for users).
+- Users must explicitly enable "Remove data on uninstall" with strong warnings.
+
+---
+
+## [1.10.1] - 2025-12-08
+
+### Added
+
+- Migration script (`scripts/migrate_to_production.py`) to move data from development `.data/` directory to production XDG directories.
+- Legacy data detection in `paths.py` with helpful migration instructions.
+- Production installation guide in `getting-started.md` with migration warning.
+
+### Fixed
+
+- **Data loss issue**: Users installing via pip after running from source no longer lose data. The app now warns about legacy data and provides migration instructions.
+- Updated all documentation to v1.10.0 consistency.
+- Browser extension manifests updated to v1.10.1.
+
+### Changed
+
+- Improved documentation across all guides for accuracy and completeness.
 
 ---
 

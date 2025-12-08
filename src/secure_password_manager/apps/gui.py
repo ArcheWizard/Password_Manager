@@ -78,6 +78,7 @@ from secure_password_manager.utils.password_analysis import (
     evaluate_password_strength,
     generate_secure_password,
 )
+from secure_password_manager.utils import paths
 from secure_password_manager.utils.paths import (
     get_auth_json_path,
     get_secret_key_enc_path,
@@ -2106,6 +2107,34 @@ class PasswordManagerApp(QMainWindow):
         bridge_group.setLayout(bridge_layout)
         layout.addWidget(bridge_group)
 
+        # Data Persistence Section
+        data_group = QGroupBox("Data Persistence")
+        data_layout = QVBoxLayout()
+
+        data_info = QLabel(
+            "By default, your data (passwords, keys, settings) persists through\n"
+            "pip uninstall/reinstall to prevent accidental data loss. Enable this\n"
+            "option only if you want data removed when uninstalling."
+        )
+        data_info.setWordWrap(True)
+        data_layout.addWidget(data_info)
+
+        self.remove_on_uninstall_checkbox = QCheckBox("Remove data on uninstall")
+        self.remove_on_uninstall_checkbox.stateChanged.connect(self.toggle_remove_on_uninstall)
+        data_layout.addWidget(self.remove_on_uninstall_checkbox)
+
+        data_location_label = QLabel()
+        data_location_label.setText(
+            f"<b>Data location:</b> {paths.get_data_dir()}<br>"
+            f"<b>Config location:</b> {paths.get_config_dir()}<br>"
+            f"<b>Cache location:</b> {paths.get_cache_dir()}"
+        )
+        data_location_label.setWordWrap(True)
+        data_layout.addWidget(data_location_label)
+
+        data_group.setLayout(data_layout)
+        layout.addWidget(data_group)
+
         # System Information Section
         sys_group = QGroupBox("System Information")
         sys_layout = QVBoxLayout()
@@ -2130,6 +2159,7 @@ class PasswordManagerApp(QMainWindow):
         self.update_kdf_info()
         self.update_system_info()
         self.update_browser_bridge_widgets()
+        self.update_data_persistence_widgets()
 
     def setup_logs_tab(self):
         """Set up the activity logs tab"""
@@ -2835,6 +2865,54 @@ class PasswordManagerApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(
                 self, "Error", f"Failed to toggle key protection: {str(e)}"
+            )
+
+    def update_data_persistence_widgets(self):
+        """Update data persistence checkbox state from settings."""
+        if not hasattr(self, "remove_on_uninstall_checkbox"):
+            return
+
+        settings = config.load_settings()
+        remove_on_uninstall = settings.get("data_persistence", {}).get("remove_on_uninstall", False)
+
+        # Block signals to avoid triggering the toggle handler
+        self.remove_on_uninstall_checkbox.blockSignals(True)
+        self.remove_on_uninstall_checkbox.setChecked(remove_on_uninstall)
+        self.remove_on_uninstall_checkbox.blockSignals(False)
+
+    def toggle_remove_on_uninstall(self, state):
+        """Handle data persistence setting change."""
+        try:
+            enabled = self.remove_on_uninstall_checkbox.isChecked()
+
+            # Update settings
+            config.update_settings({
+                "data_persistence": {
+                    "remove_on_uninstall": enabled
+                }
+            })
+
+            if enabled:
+                # Warn user about data removal
+                QMessageBox.warning(
+                    self,
+                    "Data Removal Warning",
+                    "⚠️ Data removal on uninstall is now ENABLED.\n\n"
+                    "When you uninstall this application via pip, all your:\n"
+                    "• Passwords and vault data\n"
+                    "• Encryption keys\n"
+                    "• Settings and configurations\n"
+                    "• Logs and backups\n\n"
+                    "will be PERMANENTLY DELETED.\n\n"
+                    "Make sure to export/backup your data before uninstalling!",
+                )
+                self.statusBar().showMessage("⚠️ Data will be removed on uninstall")
+            else:
+                self.statusBar().showMessage("✓ Data will persist through uninstalls (safe)")
+
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error", f"Failed to update data persistence setting: {str(e)}"
             )
 
 

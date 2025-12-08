@@ -12,6 +12,8 @@ This guide walks through installing Secure Password Manager, initializing a vaul
 
 ## Installation Steps
 
+### Development Installation (from source)
+
 1. **Clone the repository**
 
    ```bash
@@ -38,6 +40,24 @@ This guide walks through installing Secure Password Manager, initializing a vaul
    password-manager --help
    password-manager-gui --version
    ```
+
+### Production Installation (via pip)
+
+⚠️ **Important**: If you previously ran from source with a `.data/` directory, migrate your data first:
+
+```bash
+# Before pip install, migrate your data
+python scripts/migrate_to_production.py
+
+# Then install
+pip install secure-password-manager
+```
+
+Your data will be stored in XDG directories:
+
+- **Data**: `~/.local/share/secure-password-manager/`
+- **Config**: `~/.config/secure-password-manager/`
+- **Cache**: `~/.cache/secure-password-manager/`
 
 ## First-Time Setup
 
