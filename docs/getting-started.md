@@ -59,6 +59,55 @@ Your data will be stored in XDG directories:
 - **Config**: `~/.config/secure-password-manager/`
 - **Cache**: `~/.cache/secure-password-manager/`
 
+### Switching Between Development and Production Modes
+
+**Development Mode** (uses `.data/` directory):
+
+```bash
+# Uninstall production version
+pip uninstall secure-password-manager
+
+# Install in editable mode from source
+cd /path/to/password-manager
+pip install -e .
+
+# Ensure .data/ directory exists
+mkdir -p .data
+
+# Verify development mode
+python -c "from secure_password_manager.utils.paths import is_development_mode; print(f'Dev mode: {is_development_mode()}')"
+```
+
+**Production Mode** (uses XDG directories):
+
+```bash
+# Uninstall development version
+pip uninstall secure-password-manager
+
+# Install from PyPI
+pip install secure-password-manager
+
+# Verify production mode
+python -c "from secure_password_manager.utils.paths import is_development_mode; print(f'Dev mode: {is_development_mode()}')"
+```
+
+**Key Differences**:
+
+- **Development**: `pip install -e .` - Uses `.data/` in project root, code changes take effect immediately
+- **Production**: `pip install secure-password-manager` - Uses XDG directories, data persists through updates
+
+**Migrating Data**:
+
+```bash
+# Development → Production
+python scripts/migrate_to_production.py
+
+# Production → Development (if needed)
+# Copy files from XDG directories back to .data/
+cp -r ~/.local/share/secure-password-manager/* .data/
+cp ~/.config/secure-password-manager/settings.json .data/
+```
+
 ## First-Time Setup
 
 1. **Initialize the vault**

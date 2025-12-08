@@ -17,23 +17,44 @@ A cross-platform vault that stores, audits, and rotates secrets entirely on your
 
 ## Quickstart
 
+### Development Mode (Editable Install)
+
 ```bash
-# 1. Create and activate an isolated environment
+# 1. Clone and navigate to repository
+git clone https://github.com/ArcheWizard/password-manager.git
+cd password-manager
+
+# 2. Create and activate an isolated environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 2. Install the application in editable mode
+# 3. Install in editable mode (uses .data/ directory)
 pip install -e .
 
-# 3. Initialize the database and set a master password
+# 4. Initialize the database and set a master password
 password-manager --init
 
-# 4. Launch CLI or GUI
+# 5. Launch CLI or GUI
 password-manager
 password-manager-gui
 ```
 
-> **Tip:** The first run generates a `.data/` directory (in development mode) or uses XDG directories (when installed) containing `passwords.db`, `secret.key`, `crypto.salt`, `auth.json`, and (if configured) `totp_config.json`. Keep these files private and back them up using the provided tooling.
+### Production Mode (Standard Install)
+
+```bash
+# 1. Install from PyPI (uses XDG directories)
+pip install secure-password-manager
+
+# 2. Initialize and launch
+password-manager --init
+password-manager-gui
+```
+
+> **Tip:**
+>
+> - **Development mode** (`pip install -e .`): Uses `.data/` directory in project root, code changes take effect immediately
+> - **Production mode** (`pip install secure-password-manager`): Uses XDG directories (`~/.local/share`, `~/.config`, `~/.cache`), data persists through updates
+> - The first run generates directories containing `passwords.db`, `secret.key`, `crypto.salt`, `auth.json`, and (if configured) `totp_config.json`. Keep these files private and back them up using the provided tooling.
 
 ## Key Management & KDF Tuning
 

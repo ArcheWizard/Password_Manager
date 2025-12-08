@@ -12,6 +12,39 @@ Procedures for keeping Secure Password Manager healthy in production or enterpri
 
 Files follow XDG Base Directory specification. In development mode, all files are in `.data/`; in production, files are split across data/config/cache directories.
 
+### Development vs Production Mode
+
+The application automatically detects its installation mode:
+
+**Development Mode** (`.data/` directory):
+
+- Triggered by: `pip install -e .` (editable install)
+- All files stored in: `.data/` in project root
+- Use for: Testing, development, local debugging
+- Data location: `./data/`
+
+**Production Mode** (XDG directories):
+
+- Triggered by: `pip install secure-password-manager` (standard install)
+- Files split across XDG directories:
+  - Data: `~/.local/share/secure-password-manager/`
+  - Config: `~/.config/secure-password-manager/`
+  - Cache: `~/.cache/secure-password-manager/`
+- Use for: End users, production deployments
+- Data persists through pip updates/uninstalls by default
+
+**Detection Logic** (in `paths.py`):
+
+1. If running from `site-packages` or `dist-packages` → Production mode
+2. If `.data/` exists AND source tree detected → Development mode
+3. Otherwise → Production mode
+
+**Mode Verification**:
+
+```bash
+python -c "from secure_password_manager.utils.paths import is_development_mode, get_data_dir; print(f'Dev mode: {is_development_mode()}\nData dir: {get_data_dir()}')"
+```
+
 | File | Location Type | Description |
 | --- | --- | --- |
 | `passwords.db` | Data | Encrypted SQLite database with schema version tracking. |

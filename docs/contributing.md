@@ -13,6 +13,47 @@ Contributors are expected to treat others with respect, offer constructive feedb
 3. Install dependencies (`pip install -e .[dev]` when extras become available).
 4. Activate pre-commit hooks (planned) to enforce formatting.
 
+### Development vs Production Mode
+
+The application automatically detects whether it's running in development or production mode:
+
+**Development Mode** (recommended for contributors):
+
+- Install with: `pip install -e .`
+- Data stored in: `.data/` directory in project root
+- Code changes take effect immediately (no reinstall needed)
+- Activated when:
+  - Code is NOT in `site-packages` or `dist-packages`
+  - `.data/` directory exists in project root
+  - `src/` or `pyproject.toml` exists (confirms source tree)
+
+**Production Mode**:
+
+- Install with: `pip install secure-password-manager`
+- Data stored in: XDG directories (`~/.local/share`, `~/.config`, `~/.cache`)
+- Code changes require reinstall
+- Activated when:
+  - Code is in `site-packages` or `dist-packages` (pip-installed)
+
+**Quick Mode Check**:
+
+```bash
+python -c "from secure_password_manager.utils.paths import is_development_mode; print(f'Development mode: {is_development_mode()}')"
+```
+
+**Switching Modes**:
+
+```bash
+# To development mode
+pip uninstall secure-password-manager
+pip install -e .
+mkdir -p .data
+
+# To production mode
+pip uninstall secure-password-manager
+pip install secure-password-manager
+```
+
 ## Branching & Workflow
 
 1. Create a descriptive branch name: `feature/browser-ipc`, `fix/audit-deadlock`.
