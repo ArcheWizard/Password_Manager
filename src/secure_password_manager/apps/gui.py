@@ -322,6 +322,12 @@ class PasswordManagerApp(QMainWindow):
         # Store password for later use (e.g., change password, protect key)
         self._master_password = password
 
+        # Track lazy-loaded tabs
+        self._settings_tab_loaded = False
+        self._passwords_loaded = False
+        self._categories_loaded = False
+        self._logs_loaded = False
+
         # Set master password context and verify key access
         if is_key_protected():
             try:
@@ -365,9 +371,37 @@ class PasswordManagerApp(QMainWindow):
         # Create UI
         self.init_ui()
 
+        # Connect tab change handler for lazy loading
+        self.central_widget.currentChanged.connect(self._on_tab_changed)
+
     def initialize_browser_bridge(self) -> None:
         if config.get_setting("browser_bridge.enabled", False):
             self.browser_bridge_service.start()
+
+    def _on_tab_changed(self, index: int):
+        """Load tab content on first access (lazy loading)"""
+        # Passwords tab (index 0) - lazy load passwords
+        if index == 0 and not self._passwords_loaded:
+            self._passwords_loaded = True
+            self.refresh_passwords()
+        # Categories tab (index 3) - lazy load categories
+        elif index == 3 and not self._categories_loaded:
+            self._categories_loaded = True
+            self.refresh_categories()
+        # Settings tab (index 4) - lazy load settings
+        elif index == 4 and not self._settings_tab_loaded:
+            self._settings_tab_loaded = True
+            self.update_2fa_status()
+            self.update_2fa_buttons()
+            self.update_key_protection_status()
+            self.update_key_mode_status()
+            self.update_kdf_info()
+            self.update_system_info()
+            self.update_browser_bridge_widgets()
+        # Logs tab (index 5) - lazy load logs
+        elif index == 5 and not self._logs_loaded:
+            self._logs_loaded = True
+            self.refresh_logs()
 
     def get_master_password(self):
         """Prompt for master password and return it if authentication succeeds, else None."""
@@ -588,7 +622,8 @@ class PasswordManagerApp(QMainWindow):
         # Status bar
         self.statusBar().showMessage("Ready")
 
-        # Load passwords
+        # Load passwords immediately since Passwords tab is displayed by default
+        self._passwords_loaded = True
         self.refresh_passwords()
 
     def _add_tab(self, title: str, scrollable: bool = False) -> QWidget:
@@ -1915,20 +1950,25 @@ class PasswordManagerApp(QMainWindow):
 
         layout.addStretch()
 
-        # Load categories
-        self.refresh_categories()
+        # Categories will be loaded lazily when tab is first viewed
 
     def refresh_categories(self):
         """Refresh the categories list"""
         try:
             categories = get_categories()
-            passwords = get_passwords()
 
-            # Count passwords per category
-            category_counts = {}
-            for p in passwords:
-                cat = p[4]  # category column
-                category_counts[cat] = category_counts.get(cat, 0) + 1
+            # Count passwords per category using SQL GROUP BY for efficiency
+            import sqlite3
+            from secure_password_manager.utils.paths import get_database_path
+            conn = sqlite3.connect(str(get_database_path()))
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT category, COUNT(*) as count
+                FROM passwords
+                GROUP BY category
+            """)
+            category_counts = dict(cursor.fetchall())
+            conn.close()
 
             self.categories_list.setRowCount(len(categories))
 
@@ -2151,14 +2191,8 @@ class PasswordManagerApp(QMainWindow):
 
         layout.addStretch()
 
-        # NOW update all status labels and buttons (after widgets are created)
-        self.update_2fa_status()
-        self.update_2fa_buttons()
-        self.update_key_protection_status()
-        self.update_key_mode_status()
-        self.update_kdf_info()
-        self.update_system_info()
-        self.update_browser_bridge_widgets()
+        # REMOVED: Defer status updates until tab is actually viewed (lazy loading)
+        # Updates now happen in _on_tab_changed() when user switches to Settings tab
         self.update_data_persistence_widgets()
 
     def setup_logs_tab(self):
@@ -2192,8 +2226,7 @@ class PasswordManagerApp(QMainWindow):
         self.logs_text.setFontFamily("Courier")
         layout.addWidget(self.logs_text)
 
-        # Load logs
-        self.refresh_logs()
+        # Logs will be loaded lazily when tab is first viewed
 
     def update_2fa_status(self):
         """Update the 2FA status label"""
@@ -2260,20 +2293,30 @@ class PasswordManagerApp(QMainWindow):
     def update_system_info(self):
         """Update system information display"""
         import os
+        import sqlite3
+        from secure_password_manager.utils.database import _get_db_file
 
-        passwords = get_passwords()
-        categories = get_categories()
+        # Use COUNT queries instead of loading all data (much faster)
+        conn = sqlite3.connect(_get_db_file())
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM passwords")
+        password_count = cursor.fetchone()[0]
 
-        info_text = f"Password Count: {len(passwords)}\n"
-        info_text += f"Category Count: {len(categories)}\n"
+        cursor.execute("SELECT COUNT(*) FROM categories")
+        category_count = cursor.fetchone()[0]
+        conn.close()
+
+        info_text = f"Password Count: {password_count}\n"
+        info_text += f"Category Count: {category_count}\n"
         info_text += f"2FA Status: {'Enabled' if is_2fa_enabled() else 'Disabled'}\n"
         info_text += (
             f"Key Protection: {'Enabled' if is_key_protected() else 'Disabled'}\n"
         )
 
         # File sizes
-        if os.path.exists("passwords.db"):
-            size = os.path.getsize("passwords.db") / 1024
+        db_path = _get_db_file()
+        if os.path.exists(db_path):
+            size = os.path.getsize(db_path) / 1024
             info_text += f"Database Size: {size:.2f} KB\n"
 
         self.system_info_label.setText(info_text)
