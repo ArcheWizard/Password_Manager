@@ -7,12 +7,20 @@ from secure_password_manager.utils.crypto import decrypt_password
 from secure_password_manager.utils.database import get_passwords
 from secure_password_manager.utils.logger import log_info
 from secure_password_manager.utils.password_analysis import evaluate_password_strength
-from secure_password_manager.utils.security_analyzer import analyze_password_security
+from secure_password_manager.utils.parallel_security import batch_process_entries
+from secure_password_manager.utils.security_trending import record_audit_snapshot
 
 
-def audit_password_strength() -> Dict[str, List[Dict[str, Any]]]:
+def audit_password_strength(
+    use_parallel: bool = True, check_breaches: bool = True, max_workers: int = 10
+) -> Dict[str, List[Dict[str, Any]]]:
     """
     Audit all passwords for strength issues.
+
+    Args:
+        use_parallel: Whether to use parallel processing for breach checks
+        check_breaches: Whether to check passwords against breach database
+        max_workers: Maximum number of parallel workers for breach checking
 
     Returns:
         Dictionary with categorized password issues.
@@ -27,6 +35,14 @@ def audit_password_strength() -> Dict[str, List[Dict[str, Any]]]:
 
     # Track password usage for reuse detection
     password_map = {}
+
+    # If parallel processing is enabled, perform batch analysis
+    if use_parallel and check_breaches:
+        analysis_results = batch_process_entries(
+            passwords, batch_size=50, max_workers=max_workers, check_breaches=True
+        )
+    else:
+        analysis_results = {}
 
     for entry in passwords:
         (
@@ -43,8 +59,18 @@ def audit_password_strength() -> Dict[str, List[Dict[str, Any]]]:
         ) = entry
         password = decrypt_password(encrypted)
 
+        # Use parallel analysis results if available, otherwise calculate inline
+        if entry_id in analysis_results:
+            analysis = analysis_results[entry_id]
+            score = analysis.get("score", 3)
+            breached = analysis.get("breached", False)
+            breach_count = analysis.get("breach_count", 0)
+        else:
+            score, _ = evaluate_password_strength(password)
+            breached = False
+            breach_count = 0
+
         # Check strength
-        score, _ = evaluate_password_strength(password)
         if score <= 2:
             weak_passwords.append(
                 {
@@ -52,6 +78,18 @@ def audit_password_strength() -> Dict[str, List[Dict[str, Any]]]:
                     "website": website,
                     "username": username,
                     "score": score,
+                    "category": category,
+                }
+            )
+
+        # Check for breached passwords
+        if breached:
+            breached_passwords.append(
+                {
+                    "id": entry_id,
+                    "website": website,
+                    "username": username,
+                    "breach_count": breach_count,
                     "category": category,
                 }
             )
@@ -90,27 +128,6 @@ def audit_password_strength() -> Dict[str, List[Dict[str, Any]]]:
                     "category": category,
                 }
             )
-
-        # Check for breached passwords (if internet is available)
-        try:
-            # Use a limited subset to avoid making too many API calls
-            if (
-                len(breached_passwords) < 10
-            ):  # Limit to checking 10 passwords for breaches
-                analysis = analyze_password_security(password)
-                if analysis["breached"]:
-                    breached_passwords.append(
-                        {
-                            "id": entry_id,
-                            "website": website,
-                            "username": username,
-                            "breach_count": analysis["breach_count"],
-                            "category": category,
-                        }
-                    )
-        except:
-            # Skip breach checking if it fails
-            pass
 
     # Look for duplicate entries (different IDs but same website/username)
     site_user_map = {}
@@ -182,32 +199,107 @@ def get_security_score() -> int:
     return max(0, min(100, int(score)))
 
 
-def fix_security_issues(issues: List[Dict[str, Any]]) -> int:
+def fix_security_issues(
+    issues: List[Dict[str, Any]],
+    issue_type: str,
+    auto_generate: bool = False,
+    password_length: int = 16,
+) -> int:
     """
     Attempt to automatically fix security issues.
+
+    Args:
+        issues: List of password issues to fix
+        issue_type: Type of issue ('weak', 'breached', 'reused', 'duplicate')
+        auto_generate: Whether to auto-generate new passwords
+        password_length: Length for auto-generated passwords
 
     Returns:
         Number of issues fixed
     """
-    # Implementation would depend on the specific issue types
-    # For example, automatically regenerating weak passwords
-    # or fixing duplicate entries
+    from secure_password_manager.utils.crypto import encrypt_password
+    from secure_password_manager.utils.database import delete_password, update_password
+    from secure_password_manager.utils.password_generator import (
+        PasswordOptions,
+        PasswordStyle,
+        generate_password,
+    )
 
-    # This is a more complex implementation that would need to be customized
-    # based on specific requirements
-    return 0
+    fixed_count = 0
+
+    for issue in issues:
+        entry_id = issue["id"]
+
+        try:
+            if issue_type in ["weak", "breached", "reused"] and auto_generate:
+                # Generate a new strong password
+                options = PasswordOptions(
+                    length=password_length,
+                    include_uppercase=True,
+                    include_lowercase=True,
+                    include_digits=True,
+                    include_special=True,
+                    min_uppercase=2,
+                    min_lowercase=2,
+                    min_digits=2,
+                    min_special=2,
+                )
+
+                new_password = generate_password(
+                    style=PasswordStyle.RANDOM, options=options
+                )
+                encrypted = encrypt_password(new_password)
+
+                # Update the password
+                update_password(entry_id, encrypted_password=encrypted)
+                fixed_count += 1
+
+            elif issue_type == "duplicate":
+                # Delete duplicate entries (keep the first one)
+                if "duplicate_id" in issue:
+                    delete_password(entry_id)
+                    fixed_count += 1
+
+        except Exception as e:
+            # Log error but continue with other fixes
+            log_info(f"Failed to fix issue for entry {entry_id}: {str(e)}")
+            continue
+
+    return fixed_count
 
 
-def run_security_audit() -> Dict[str, Any]:
-    """Run a comprehensive security audit."""
-    audit_results = audit_password_strength()
+def run_security_audit(
+    use_parallel: bool = True, check_breaches: bool = True, max_workers: int = 10,
+    record_history: bool = True
+) -> Dict[str, Any]:
+    """
+    Run a comprehensive security audit.
+
+    Args:
+        use_parallel: Whether to use parallel processing for breach checks
+        check_breaches: Whether to check passwords against breach database
+        max_workers: Maximum number of parallel workers for breach checking
+        record_history: Whether to record this audit in security history
+
+    Returns:
+        Dictionary containing security score, issues, and timestamp
+    """
+    audit_results = audit_password_strength(
+        use_parallel=use_parallel, check_breaches=check_breaches, max_workers=max_workers
+    )
     security_score = get_security_score()
 
     # Log the audit
     log_info(f"Security audit completed. Score: {security_score}")
 
-    return {
+    result = {
         "score": security_score,
         "issues": audit_results,
         "timestamp": int(time.time()),
     }
+
+    # Record in history for trending
+    if record_history:
+        record_audit_snapshot(result)
+
+    return result

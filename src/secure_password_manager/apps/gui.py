@@ -1162,7 +1162,7 @@ class PasswordManagerApp(QMainWindow):
 
         # Close button
         close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dialog.close)
+        close_btn.clicked.connect(lambda _: (dialog.close(), None)[1])
         layout.addWidget(close_btn)
 
         if auto_close:

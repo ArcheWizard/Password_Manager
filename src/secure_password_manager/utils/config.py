@@ -21,7 +21,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "key_management": {
         "mode": KEY_MODE_FILE,
         "kdf_iterations": 390_000,
-        "benchmark_target_ms": 350,
+        "benchmark_target_ms": 100,
     },
     "clipboard": {
         "auto_clear_seconds": 25,
@@ -36,6 +36,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "port": 43110,
         "token_ttl_hours": 24,
         "pairing_window_seconds": 120,
+        "enable_tls": False,
     },
     "data_persistence": {
         "remove_on_uninstall": False,  # Keep data safe by default

@@ -23,6 +23,13 @@ from secure_password_manager.utils.crypto import decrypt_password, encrypt_passw
 from secure_password_manager.utils.database import add_password, get_passwords
 from secure_password_manager.utils.logger import log_info, log_warning
 from secure_password_manager.utils.paths import get_browser_bridge_tokens_path
+from secure_password_manager.utils.payload_encryption import create_payload_encryptor
+from secure_password_manager.utils.tls import (
+    cert_exists,
+    generate_self_signed_cert,
+    get_cert_fingerprint,
+    get_cert_paths,
+)
 
 
 class PairingRequest(BaseModel):
@@ -48,8 +55,6 @@ class TokenStore:
         if not self.path.exists():
             return {}
         try:
-            import json
-
             with open(self.path, encoding="utf-8") as handle:
                 data = json.load(handle)
             if isinstance(data, dict):
@@ -101,14 +106,24 @@ class TokenStore:
 class BrowserBridgeService:
     """Encapsulates the FastAPI server and token logic."""
 
-    def __init__(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, enable_tls: Optional[bool] = None) -> None:
         settings = config.load_settings().get("browser_bridge", {})
         self.host = host or settings.get("host", "127.0.0.1")
         self.port = port or int(settings.get("port", 43110))
+        self.enable_tls = enable_tls if enable_tls is not None else settings.get("enable_tls", False)
         ttl_hours = int(settings.get("token_ttl_hours", 24))
         self._token_store = TokenStore(get_browser_bridge_tokens_path(), ttl_hours)
         self._pairing_window_seconds = int(settings.get("pairing_window_seconds", 120))
         self._pairing: Optional[Dict[str, Any]] = None
+        self._cert_path: Optional[Path] = None
+        self._key_path: Optional[Path] = None
+        self._cert_fingerprint: Optional[str] = None
+
+        # Generate TLS certificates if enabled
+        if self.enable_tls:
+            self._cert_path, self._key_path = generate_self_signed_cert()
+            self._cert_fingerprint = get_cert_fingerprint(self._cert_path)
+
         self._app = self._build_app()
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None
@@ -142,13 +157,17 @@ class BrowserBridgeService:
 
         @app.get("/v1/status")
         async def status_endpoint() -> Dict[str, Any]:
-            return {
+            status_data = {
                 "status": "ok",
                 "host": service.host,
                 "port": service.port,
                 "running": service.is_running,
                 "pairing_active": bool(service._pairing),
+                "tls_enabled": service.enable_tls,
             }
+            if service.enable_tls and service._cert_fingerprint:
+                status_data["cert_fingerprint"] = service._cert_fingerprint
+            return status_data
 
         @app.post("/v1/pair")
         async def pair_endpoint(payload: PairingRequest) -> Dict[str, Any]:
@@ -425,20 +444,35 @@ class BrowserBridgeService:
         if self.is_running:
             return
 
-        config_obj = uvicorn.Config(
-            self._app,
-            host=self.host,
-            port=self.port,
-            log_level="warning",
-        )
+        # Configure TLS if enabled
+        if self.enable_tls and self._cert_path and self._key_path:
+            log_info(f"Browser bridge TLS enabled with certificate fingerprint: {self._cert_fingerprint}")
+            config_obj = uvicorn.Config(
+                self._app,
+                host=self.host,
+                port=self.port,
+                log_level="warning",
+                ssl_keyfile=str(self._key_path),
+                ssl_certfile=str(self._cert_path),
+            )
+        else:
+            config_obj = uvicorn.Config(
+                self._app,
+                host=self.host,
+                port=self.port,
+                log_level="warning",
+            )
+
         self._server = uvicorn.Server(config_obj)
 
         def _run_server() -> None:
-            self._server.run()
+            if self._server:
+                self._server.run()
 
         self._thread = threading.Thread(target=_run_server, daemon=True)
         self._thread.start()
-        log_info(f"Browser bridge started on {self.host}:{self.port}")
+        protocol = "https" if self.enable_tls else "http"
+        log_info(f"Browser bridge started on {protocol}://{self.host}:{self.port}")
 
     def stop(self) -> None:
         if self._server:

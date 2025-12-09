@@ -73,8 +73,8 @@ def test_clipboard_manager_multiple_copies_cancel_previous_timer():
             second_timer = manager._clear_timer
 
             assert first_timer is not second_timer
-            assert not first_timer.is_alive()
-            assert second_timer.is_alive()
+            assert first_timer is not None and not first_timer.is_alive()
+            assert second_timer is not None and second_timer.is_alive()
 
 
 def test_clipboard_manager_clear_now():

@@ -189,7 +189,7 @@ Tokens expire after **30 days**. When expired:
 
 ### Project Structure
 
-```
+```text
 browser-extension/
 ├── manifest.json              # Chrome/Chromium manifest (v3)
 ├── manifest-firefox.json      # Firefox manifest (v2)

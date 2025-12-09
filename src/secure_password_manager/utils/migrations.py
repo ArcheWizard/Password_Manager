@@ -1,7 +1,7 @@
 """Database migration utilities."""
 
 import sqlite3
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from secure_password_manager.utils.logger import log_info, log_warning
 from secure_password_manager.utils.paths import get_database_path
@@ -121,7 +121,7 @@ def get_pending_migrations() -> List[int]:
     return [v for v in range(current_version + 1, max_version + 1) if v in MIGRATIONS]
 
 
-def run_migrations(target_version: int = None) -> Dict[str, any]:
+def run_migrations(target_version: Optional[int] = None) -> Dict[str, Any]:
     """
     Run pending migrations up to target version.
 

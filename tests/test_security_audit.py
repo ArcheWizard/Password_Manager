@@ -104,14 +104,17 @@ def test_audit_password_strength_expired_passwords(setup_test_passwords):
 
 def test_audit_password_strength_breached_passwords(setup_test_passwords):
     """Test auditing for breached passwords (with mocked API)."""
-    # Mock the analyze_password_security function to simulate a breach
-    with patch.object(security_audit, "analyze_password_security") as mock_analyze:
-        mock_analyze.return_value = {"breached": True, "breach_count": 12345}
+    # Mock the breach checking in parallel_security module
+    with patch("secure_password_manager.utils.parallel_security.check_password_breach") as mock_check:
+        mock_check.return_value = (True, 12345)  # All passwords breached
 
-        audit_results = audit_password_strength()
+        audit_results = audit_password_strength(
+            use_parallel=True, check_breaches=True, max_workers=2
+        )
 
         assert "breached_passwords" in audit_results
-        # Breached list might be limited by the 10-entry cap in the code
+        # Should have found breached passwords
+        assert len(audit_results["breached_passwords"]) > 0
 
 
 def test_audit_password_strength_empty_database(clean_crypto_files, clean_database):
@@ -181,9 +184,14 @@ def test_get_security_score_range(setup_test_passwords):
 
 
 def test_fix_security_issues():
-    """Test fix_security_issues stub."""
-    # Currently returns 0 (not implemented)
-    fixed = fix_security_issues([])
+    """Test fix_security_issues function."""
+    # Test with empty list
+    fixed = fix_security_issues([], issue_type="weak")
+    assert fixed == 0
+
+    # Test with mock issues but no auto-generate
+    mock_issues = [{"id": 1, "website": "test.com"}]
+    fixed = fix_security_issues(mock_issues, issue_type="weak", auto_generate=False)
     assert fixed == 0
 
 
@@ -212,14 +220,18 @@ def test_run_security_audit(setup_test_passwords):
 
 def test_audit_handles_breach_check_errors(setup_test_passwords):
     """Test that audit handles breach check errors gracefully."""
-    # Mock analyze_password_security to raise an exception
-    with patch.object(security_audit, "analyze_password_security") as mock_analyze:
-        mock_analyze.side_effect = Exception("Network error")
+    # Mock check_password_breach at the security_analyzer level
+    with patch("secure_password_manager.utils.security_analyzer.check_password_breach") as mock_check:
+        mock_check.side_effect = Exception("Network error")
 
-        # Should not raise, just skip breach checking
-        audit_results = audit_password_strength()
+        # Should not raise, parallel_security handles errors and returns (False, 0)
+        audit_results = audit_password_strength(
+            use_parallel=True, check_breaches=True, max_workers=2
+        )
 
         assert "breached_passwords" in audit_results
+        # Errors result in no breached passwords detected
+        assert len(audit_results["breached_passwords"]) == 0
         # Might be empty due to errors
 
 

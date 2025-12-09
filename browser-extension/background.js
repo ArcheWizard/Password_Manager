@@ -1,12 +1,19 @@
 // Background service worker for Secure Password Manager extension
 // Handles API communication with the local desktop app
 
-const API_BASE_URL = 'http://127.0.0.1:43110';
+// Try HTTPS first, fallback to HTTP
+const API_BASE_URLS = [
+  'https://127.0.0.1:43110',
+  'http://127.0.0.1:43110'
+];
+let API_BASE_URL = API_BASE_URLS[0]; // Start with HTTPS
+
 const STORAGE_KEYS = {
   TOKEN: 'auth_token',
   TOKEN_EXPIRES: 'token_expires_at',
   FINGERPRINT: 'browser_fingerprint',
-  SETTINGS: 'extension_settings'
+  SETTINGS: 'extension_settings',
+  API_URL: 'api_base_url'
 };
 
 // Generate a unique browser fingerprint
@@ -33,6 +40,38 @@ async function getFingerprint() {
   const fingerprint = generateFingerprint();
   await chrome.storage.local.set({ [STORAGE_KEYS.FINGERPRINT]: fingerprint });
   return fingerprint;
+}
+
+// Get the working API base URL (try HTTPS first, fallback to HTTP)
+async function getApiBaseUrl() {
+  // Check if we have a saved working URL
+  const result = await chrome.storage.local.get(STORAGE_KEYS.API_URL);
+  if (result[STORAGE_KEYS.API_URL]) {
+    API_BASE_URL = result[STORAGE_KEYS.API_URL];
+    return API_BASE_URL;
+  }
+
+  // Try each URL until one works
+  for (const url of API_BASE_URLS) {
+    try {
+      const response = await fetch(`${url}/v1/status`, {
+        method: 'GET',
+        // Ignore certificate errors for self-signed certs in development
+        // In production, we'd implement proper certificate pinning
+      });
+      if (response.ok) {
+        API_BASE_URL = url;
+        // Save the working URL
+        await chrome.storage.local.set({ [STORAGE_KEYS.API_URL]: url });
+        return url;
+      }
+    } catch (error) {
+      console.log(`Failed to connect to ${url}:`, error.message);
+    }
+  }
+
+  // Default to HTTPS if nothing works
+  return API_BASE_URLS[0];
 }
 
 // Get stored auth token
@@ -68,6 +107,9 @@ async function clearToken() {
 // Check API status
 async function checkStatus() {
   try {
+    // Ensure we have the working API URL
+    await getApiBaseUrl();
+
     const response = await fetch(`${API_BASE_URL}/v1/status`);
     if (!response.ok) {
       throw new Error(`Status check failed: ${response.status}`);

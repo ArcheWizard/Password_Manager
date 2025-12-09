@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "http://127.0.0.1:43110/*"
+    "http://127.0.0.1:43110/*",
+    "https://127.0.0.1:43110/*"
   ],
   "background": {
     "scripts": ["background-firefox.js"],

@@ -16,18 +16,17 @@ Strategic initiatives for upcoming releases. Organized by timeframe; actual deli
 ## Near Term (0–3 months)
 
 - **Browser Extension Enhancements**
-  - Add TLS support with certificate pinning for localhost connections
-  - Encrypted payload negotiation for added security
+  - ✅ Add TLS support with certificate pinning for localhost connections
+  - ✅ Encrypted payload negotiation for added security
   - Domain-socket transports for alternative IPC
   - Browser extension publishing to Chrome Web Store and Firefox Add-ons
 - **UX Enhancements**
-  - Category manager with colors/icons and persistent filters
-  - Enhanced password generator UI with pattern-based generation
+  - ✅ Enhanced password generator with pattern-based generation
   - Bulk operations (select multiple entries for rotation/deletion)
 - **Security Audit Enhancements**
-  - Parallelized breach checks with offline dictionary update packs
-  - Remediation actions (bulk rotate, notify)
-  - Security score trending and historical analysis
+  - ✅ Parallelized breach checks with offline dictionary update packs
+  - ✅ Remediation actions (bulk rotate, notify)
+  - ✅ Security score trending and historical analysis
 - **Test & CI Coverage**
   - Achieve ≥90% coverage with branch protection
   - Add pytest-qt smoke suite and coverage reporting in CI
