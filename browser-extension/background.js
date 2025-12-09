@@ -155,6 +155,44 @@ async function queryCredentials(origin) {
   }
 }
 
+// Check if credentials exist (without approval prompt)
+async function checkCredentials(origin, username) {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error('Not paired with desktop app');
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/credentials/check`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        origin: origin,
+        username: username
+      })
+    });
+
+    if (response.status === 401) {
+      await clearToken();
+      throw new Error('Token expired, please pair again');
+    }
+
+    if (!response.ok) {
+      throw new Error(`Check failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.exists || false;
+  } catch (error) {
+    console.error('Credentials check error:', error);
+    throw error;
+  }
+}
+
 // Store new credentials
 async function storeCredentials(origin, website, username, password, metadata = {}) {
   const token = await getToken();
@@ -246,6 +284,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const entries = await queryCredentials(message.origin);
         return { entries };
+      } catch (error) {
+        return { error: error.message };
+      }
+    },
+
+    'check_credentials': async () => {
+      try {
+        const exists = await checkCredentials(message.origin, message.username);
+        return { exists };
       } catch (error) {
         return { error: error.message };
       }

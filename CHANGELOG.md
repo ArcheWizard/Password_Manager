@@ -2,6 +2,23 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [1.10.3] - 2025-12-09
+
+### Fixed
+
+- **Browser Extension**: Fixed credential saving functionality - credentials are now properly stored in the vault database when saved from the browser extension.
+- Improved success notification in browser extension to show username when credentials are saved.
+- Added proper error handling and validation for the `/v1/credentials/store` endpoint.
+- **Browser Extension**: Prevented duplicate credentials - the save prompt no longer appears if credentials for the same username and origin already exist in the vault.
+
+### Added
+
+- Test coverage for the browser bridge credentials store endpoint.
+- Validation of required fields (origin, username, password) when storing credentials.
+- Duplicate credential detection in browser extension before prompting to save.
+
+---
+
 ## [1.10.2] - 2025-12-08
 
 ### Added

@@ -19,8 +19,8 @@ from secure_password_manager.utils.approval_manager import (
     ApprovalDecision,
     get_approval_manager,
 )
-from secure_password_manager.utils.crypto import decrypt_password
-from secure_password_manager.utils.database import get_passwords
+from secure_password_manager.utils.crypto import decrypt_password, encrypt_password
+from secure_password_manager.utils.database import add_password, get_passwords
 from secure_password_manager.utils.logger import log_info, log_warning
 from secure_password_manager.utils.paths import get_browser_bridge_tokens_path
 
@@ -279,15 +279,124 @@ class BrowserBridgeService:
                 log_warning(f"Approval request failed: {exc}")
                 return {"entries": [], "error": "Approval request failed"}
 
+        @app.post("/v1/credentials/check")
+        async def credentials_check(
+            payload: Dict[str, Any],
+            token: Dict[str, Any] = Depends(require_token),
+        ) -> Dict[str, Any]:
+            """Check if credentials exist without requiring approval (for duplicate detection)."""
+            origin = payload.get("origin", "").lower()
+            username = payload.get("username", "")
+
+            if not origin or not username:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Missing origin or username",
+                )
+
+            # Extract domain from origin for matching
+            origin_domain = (
+                origin.replace("https://", "").replace("http://", "").split("/")[0]
+            )
+            origin_name = (
+                origin_domain.split(".")[0] if "." in origin_domain else origin_domain
+            )
+
+            # Check if credentials exist (without decrypting passwords)
+            for entry in get_passwords():
+                (
+                    _entry_id,
+                    website,
+                    entry_username,
+                    _encrypted,
+                    _category,
+                    _notes,
+                    _created,
+                    _updated,
+                    _expiry,
+                    _favorite,
+                ) = entry
+                site = (website or "").lower()
+                notes = (_notes or "").lower()
+
+                # Match origin with website/notes
+                if not (
+                    origin in site
+                    or origin_domain in site
+                    or origin_name in site
+                    or origin in notes
+                    or origin_domain in notes
+                ):
+                    continue
+
+                # Check if username matches
+                if entry_username == username:
+                    return {"exists": True}
+
+            return {"exists": False}
+
         @app.post("/v1/credentials/store")
         async def credentials_store(
             payload: Dict[str, Any],
             token: Dict[str, Any] = Depends(require_token),
         ) -> Dict[str, Any]:
-            log_info(
-                f"Browser bridge store request from {token.get('fingerprint')}: {payload.get('origin', 'unknown')}"
-            )
-            return {"status": "accepted"}
+            """Store new credentials in the vault."""
+            try:
+                origin = payload.get("origin", "")
+                title = payload.get("title", "")
+                username = payload.get("username", "")
+                password = payload.get("password", "")
+                metadata = payload.get("metadata", {})
+
+                # Validate required fields
+                if not all([origin, username, password]):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Missing required fields: origin, username, password",
+                    )
+
+                # Use title or fallback to origin for website field
+                website = title or origin
+
+                # Encrypt the password
+                encrypted_password = encrypt_password(password)
+
+                # Build notes from metadata if provided
+                notes_parts = []
+                if metadata.get("url"):
+                    notes_parts.append(f"URL: {metadata['url']}")
+                if metadata.get("saved_at"):
+                    notes_parts.append(f"Saved: {metadata['saved_at']}")
+                notes_parts.append(f"Source: Browser Extension ({token.get('browser', 'unknown')})")
+                notes = "\n".join(notes_parts)
+
+                # Add to database
+                add_password(
+                    website=website,
+                    username=username,
+                    encrypted_password=encrypted_password,
+                    category="Web",
+                    notes=notes,
+                )
+
+                log_info(
+                    f"Browser bridge stored credentials for {website} (user: {username}) "
+                    f"from {token.get('fingerprint')}"
+                )
+
+                return {
+                    "status": "saved",
+                    "website": website,
+                    "username": username,
+                }
+            except HTTPException:
+                raise
+            except Exception as exc:
+                log_warning(f"Failed to store credentials: {exc}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to store credentials: {str(exc)}",
+                )
 
         @app.post("/v1/audit/report")
         async def audit_report(

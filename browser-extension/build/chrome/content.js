@@ -363,9 +363,33 @@
         return;
       }
 
-      // Ask if user wants to save credentials
-      setTimeout(() => {
-        promptToSaveCredentials(usernameField.value, passwordField.value);
+      // Check if credentials already exist before prompting
+      setTimeout(async () => {
+        try {
+          const response = await chrome.runtime.sendMessage({
+            action: 'check_credentials',
+            origin: currentOrigin,
+            username: usernameField.value
+          });
+
+          if (response.error) {
+            // If not paired or error, show save prompt anyway
+            promptToSaveCredentials(usernameField.value, passwordField.value);
+            return;
+          }
+
+          if (response.exists) {
+            // Credentials already exist, don't prompt to save
+            return;
+          }
+
+          // Credentials don't exist, prompt to save
+          promptToSaveCredentials(usernameField.value, passwordField.value);
+        } catch (error) {
+          // On error, show save prompt anyway
+          console.error('Failed to check existing credentials:', error);
+          promptToSaveCredentials(usernameField.value, passwordField.value);
+        }
       }, 1000);
     });
   }
@@ -418,8 +442,10 @@
 
         if (response.error) {
           showNotification('error', 'Failed to save: ' + response.error);
+        } else if (response.success) {
+          showNotification('success', `Credentials saved for ${escapeHtml(username)}`);
         } else {
-          showNotification('success', 'Credentials saved');
+          showNotification('error', 'Failed to save credentials');
         }
       } catch (error) {
         showNotification('error', 'Failed to save credentials');
