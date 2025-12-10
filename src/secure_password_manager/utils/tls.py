@@ -70,7 +70,7 @@ def generate_self_signed_cert(
                 cert = x509.load_pem_x509_certificate(f.read())
 
             # Check if certificate is still valid for at least 30 days
-            days_remaining = (cert.not_valid_after_utc - datetime.datetime.now(datetime.UTC)).days
+            days_remaining = (cert.not_valid_after_utc - datetime.datetime.now(datetime.timezone.utc)).days
             if days_remaining > 30:
                 log_info(f"Using existing TLS certificate (valid for {days_remaining} more days)")
                 return cert_path, key_path
@@ -97,7 +97,7 @@ def generate_self_signed_cert(
     ])
 
     # Build certificate
-    now = datetime.datetime.now(datetime.UTC)
+    now = datetime.datetime.now(datetime.timezone.utc)
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
