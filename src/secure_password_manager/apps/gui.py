@@ -329,6 +329,10 @@ class PasswordManagerApp(QMainWindow):
         self._categories_loaded = False
         self._logs_loaded = False
 
+        # Timer tracking for password reveal
+        self._active_timers = []
+        self._lock = threading.Lock()
+
         # Set master password context and verify key access
         if is_key_protected():
             try:
@@ -894,6 +898,8 @@ class PasswordManagerApp(QMainWindow):
 
     def refresh_passwords(self):
         """Refresh the password table with current filters"""
+        # Cancel any pending password reveal timers when refreshing table
+        self._cancel_all_timers()
         self.apply_filters()
 
     def apply_filters(self):
@@ -1075,8 +1081,44 @@ class PasswordManagerApp(QMainWindow):
 
         password_item.setText(password)
 
-        # Reset after 3 seconds
-        QTimer.singleShot(3000, lambda: password_item.setText("••••••••"))
+        # Store weak references to check validity before accessing
+        weak_password_item = weakref.ref(password_item)
+        weak_table = weakref.ref(self.table)
+
+        def hide_password():
+            # Check if widgets still exist before accessing
+            try:
+                table = weak_table()
+                item = weak_password_item()
+
+                # Verify both table and item still exist
+                if table is not None and item is not None:
+                    # Double-check item is still in the table at the same position
+                    current_item = table.item(row, 3)
+                    if current_item is item:
+                        item.setText("••••••••")
+            except (RuntimeError, AttributeError):
+                # Item or table was deleted, ignore silently
+                pass
+
+        # Create timer and store it
+        timer = QTimer(self)  # Parent to self for automatic cleanup
+        timer.setSingleShot(True)
+        timer.timeout.connect(hide_password)
+
+        # Remove timer from tracking list when it fires
+        def cleanup_timer():
+            with self._lock:
+                if timer in self._active_timers:
+                    self._active_timers.remove(timer)
+
+        timer.timeout.connect(cleanup_timer)
+
+        # Add to tracking list
+        with self._lock:
+            self._active_timers.append(timer)
+
+        timer.start(3000)
 
         if auto_close:
             auto_close.close()
@@ -2645,13 +2687,17 @@ class PasswordManagerApp(QMainWindow):
             self.browser_bridge_service.stop()
         super().closeEvent(event)
 
-    def _cancel_all_timers(self) -> None:
-        """Cancel all active timers (called during table refresh and cleanup)."""
-        with self._lock:
-            for timer in self._active_timers:
-                if timer.isActive():
-                    timer.stop()
-            self._active_timers.clear()
+    def refresh_logs(self):
+        """Refresh the activity logs display"""
+        try:
+            logs = get_log_entries(count=100)
+            if logs:
+                self.logs_text.setPlainText("\n".join(logs))
+                self.statusBar().showMessage(f"Loaded {len(logs)} log entries")
+            else:
+                self.logs_text.setPlainText("No log entries found.")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not load logs: {str(e)}")
 
     def load_passwords(self):
         """Load and display passwords in the table."""
