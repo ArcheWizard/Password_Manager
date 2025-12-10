@@ -8,6 +8,10 @@ on:
   release:
     types: [ created ]
 
+permissions:
+  contents: write
+  packages: read
+
 jobs:
   test:
     name: Test on Python ${{ matrix.python-version }}
