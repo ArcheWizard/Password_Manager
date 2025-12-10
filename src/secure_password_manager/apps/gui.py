@@ -3,6 +3,7 @@
 import sys
 import threading
 import time
+import weakref
 from typing import Optional
 
 from PyQt5.QtCore import QObject, QSize, Qt, QTimer, pyqtSignal
@@ -73,7 +74,7 @@ from secure_password_manager.utils.key_management import (
     get_key_mode,
     switch_key_mode,
 )
-from secure_password_manager.utils.logger import get_log_entries
+from secure_password_manager.utils.logger import get_log_entries, log_warning
 from secure_password_manager.utils.password_analysis import (
     evaluate_password_strength,
     generate_secure_password,
@@ -373,6 +374,10 @@ class PasswordManagerApp(QMainWindow):
 
         # Connect tab change handler for lazy loading
         self.central_widget.currentChanged.connect(self._on_tab_changed)
+
+        # Track active timers for cleanup
+        self._active_timers = []
+        self._lock = threading.Lock()
 
     def initialize_browser_bridge(self) -> None:
         if config.get_setting("browser_bridge.enabled", False):
@@ -2629,6 +2634,10 @@ class PasswordManagerApp(QMainWindow):
         self.update_browser_bridge_widgets()
 
     def closeEvent(self, event):  # type: ignore[override]
+        """Clean up resources on window close."""
+        # Cancel all active timers
+        self._cancel_all_timers()
+
         if (
             hasattr(self, "browser_bridge_service")
             and self.browser_bridge_service.is_running
@@ -2636,337 +2645,156 @@ class PasswordManagerApp(QMainWindow):
             self.browser_bridge_service.stop()
         super().closeEvent(event)
 
-    def refresh_logs(self):
-        """Refresh the activity logs display"""
-        try:
-            logs = get_log_entries(count=100)
-            if logs:
-                self.logs_text.setPlainText("\n".join(logs))
-                self.statusBar().showMessage(f"Loaded {len(logs)} log entries")
-            else:
-                self.logs_text.setPlainText("No log entries found.")
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Could not load logs: {str(e)}")
+    def _cancel_all_timers(self) -> None:
+        """Cancel all active timers (called during table refresh and cleanup)."""
+        with self._lock:
+            for timer in self._active_timers:
+                if timer.isActive():
+                    timer.stop()
+            self._active_timers.clear()
 
-    def change_master_password(self):
-        """Dialog to change the master password"""
+    def load_passwords(self):
+        """Load and display passwords in the table."""
+        # Cancel any pending password reveal timers when refreshing table
+        self._cancel_all_timers()
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Change Master Password")
-        dialog.setModal(True)
+        # Clear table
+        self.table.setRowCount(0)
 
-        layout = QFormLayout()
+        # Get passwords
+        passwords = get_passwords()
 
-        # Current password
-        current_pw_input = QLineEdit()
-        current_pw_input.setEchoMode(QLineEdit.Password)
-        layout.addRow("Current Password:", current_pw_input)
+        # Fill table
+        self.table.setRowCount(len(passwords))
 
-        # New password
-        new_pw_input = QLineEdit()
-        new_pw_input.setEchoMode(QLineEdit.Password)
-        layout.addRow("New Password:", new_pw_input)
+        for row, entry in enumerate(passwords):
+            (
+                entry_id,
+                website,
+                username,
+                encrypted,
+                category,
+                notes,
+                created,
+                updated,
+                expiry,
+                favorite,
+            ) = entry
+            decrypted = decrypt_password(encrypted)
 
-        # Confirm new password
-        confirm_pw_input = QLineEdit()
-        confirm_pw_input.setEchoMode(QLineEdit.Password)
-        layout.addRow("Confirm Password:", confirm_pw_input)
+            # Format dates
+            created_str = time.strftime("%Y-%m-%d", time.localtime(created))
 
-        # Buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
-            QtCoreQt.Orientation.Horizontal,
-            dialog,
-        )
-        layout.addRow(buttons)
-
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-
-        dialog.setLayout(layout)
-
-        if dialog.exec_() == QDialog.Accepted:
-            current_pass = current_pw_input.text()
-            new_pass = new_pw_input.text()
-            confirm_pass = confirm_pw_input.text()
-
-            # Validate current password
-            if not authenticate(current_pass):
-                QMessageBox.warning(self, "Error", "Current password is incorrect.")
-                return
-
-            # Validate new password
-            if len(new_pass) < 8:
-                QMessageBox.warning(
-                    self, "Error", "New password must be at least 8 characters long."
-                )
-                return
-
-            if new_pass != confirm_pass:
-                QMessageBox.warning(self, "Error", "New passwords do not match.")
-                return
-
-            # Check password strength
-            strength = evaluate_password_strength(new_pass)
-            score = strength.get("score", 0) if isinstance(strength, dict) else 0
-            feedback = (
-                strength.get("feedback", "") if isinstance(strength, dict) else ""
-            )
-
-            if score < 3:
-                reply = QMessageBox.question(
-                    self,
-                    "Weak Password",
-                    f"Password strength: {score}/5 - {feedback}\n\n"
-                    "This password is considered weak. Continue anyway?",
-                    QMessageBox.Yes | QMessageBox.No,
-                )
-                if reply == QMessageBox.No:
-                    return
-
-            # Update password
-            try:
-                set_master_password(new_pass)
-                set_master_password_context(new_pass)
-
-                # If key is protected, suggest re-protecting with new password
-                if is_key_protected():
-                    reply = QMessageBox.question(
-                        self,
-                        "Re-protect Key",
-                        "Your encryption key is currently protected with the old master password.\n\n"
-                        "Would you like to re-protect it with the new master password?",
-                        QMessageBox.Yes | QMessageBox.No,
-                    )
-                    if reply == QMessageBox.Yes:
-                        try:
-                            from secure_password_manager.utils.crypto import (
-                                unprotect_key,
-                            )
-
-                            unprotect_key(current_pass)
-                            protect_key_with_master_password(new_pass)
-                            QMessageBox.information(
-                                self,
-                                "Success",
-                                "Master password changed and key re-protected successfully!",
-                            )
-                        except Exception as e:
-                            QMessageBox.warning(
-                                self,
-                                "Warning",
-                                f"Password changed but key re-protection failed: {str(e)}",
-                            )
+            # Format expiry
+            days_left = None
+            if expiry:
+                days_left = int((expiry - time.time()) / 86400)
+                if days_left < 0:
+                    expiry_str = "EXPIRED"
                 else:
-                    QMessageBox.information(
-                        self, "Success", "Master password changed successfully!"
-                    )
-
-                self.statusBar().showMessage("Master password updated")
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Error", f"Failed to change password: {str(e)}"
-                )
-
-    def setup_2fa(self):
-        """Setup TOTP two-factor authentication"""
-        if is_2fa_enabled():
-            QMessageBox.information(
-                self, "2FA", "Two-factor authentication is already enabled."
-            )
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "Setup 2FA",
-            "This will generate a new TOTP secret and QR code.\n\n"
-            "You'll need to scan the QR code with your authenticator app.\n\n"
-            "Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-
-        if reply == QMessageBox.Yes:
-            try:
-                secret = setup_totp()
-
-                msg = QMessageBox(self)
-                msg.setWindowTitle("2FA Setup Complete")
-                msg.setText(
-                    "Two-factor authentication has been set up!\n\n"
-                    f"Secret: {secret}\n\n"
-                    "A QR code has been saved to 'totp_qr.png'.\n"
-                    "Scan it with your authenticator app (Google Authenticator, Authy, etc.).\n\n"
-                    "You will need to enter a code from your app on next login."
-                )
-                msg.setIcon(QMessageBox.Information)
-
-                # Try to show QR code if file exists
-                import os
-
-                if os.path.exists("totp_qr.png"):
-                    from PyQt5.QtGui import QPixmap
-
-                    pixmap = QPixmap("totp_qr.png")
-                    if not pixmap.isNull():
-                        pixmap = pixmap.scaled(
-                            300, 300, QtCoreQt.AspectRatioMode.KeepAspectRatio
-                        )
-                        msg.setIconPixmap(pixmap)
-
-                msg.exec_()
-
-                self.update_2fa_status()
-                self.update_2fa_buttons()
-                self.update_system_info()
-
-                self.statusBar().showMessage("2FA enabled successfully")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to setup 2FA: {str(e)}")
-
-    def disable_2fa(self):
-        """Disable two-factor authentication"""
-        if not is_2fa_enabled():
-            QMessageBox.information(
-                self, "2FA", "Two-factor authentication is already disabled."
-            )
-            return
-
-        reply = QMessageBox.question(
-            self,
-            "Disable 2FA",
-            "Are you sure you want to disable two-factor authentication?\n\n"
-            "This will reduce the security of your account.",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-
-        if reply == QMessageBox.Yes:
-            try:
-                disable_2fa()
-                QMessageBox.information(
-                    self, "Success", "Two-factor authentication has been disabled."
-                )
-
-                self.update_2fa_status()
-                self.update_2fa_buttons()
-                self.update_system_info()
-
-                self.statusBar().showMessage("2FA disabled")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to disable 2FA: {str(e)}")
-
-    def toggle_key_protection(self):
-        """Toggle encryption key protection on/off"""
-        try:
-            if is_key_protected():
-                # Disable protection
-                reply = QMessageBox.question(
-                    self,
-                    "Disable Key Protection",
-                    "This will decrypt your vault key and store it in plaintext.\n\n"
-                    "Continue?",
-                    QMessageBox.Yes | QMessageBox.No,
-                )
-
-                if reply == QMessageBox.Yes:
-                    from secure_password_manager.utils.crypto import unprotect_key
-
-                    unprotect_key(self._master_password)
-                    # Clear the context since we're back to plaintext
-                    set_master_password_context(None)
-                    QMessageBox.information(
-                        self,
-                        "Success",
-                        "Key protection disabled. Your key is now stored in plaintext.",
-                    )
-                    self.update_key_protection_status()
-                    self.update_system_info()
-                    self.statusBar().showMessage("Key protection disabled")
+                    expiry_str = f"{days_left} days"
             else:
-                # Enable protection
-                reply = QMessageBox.question(
-                    self,
-                    "Enable Key Protection",
-                    "This will encrypt your vault key with your master password.\n\n"
-                    "You'll need to enter your master password at login to decrypt it.\n\n"
-                    "Continue?",
-                    QMessageBox.Yes | QMessageBox.No,
-                )
+                expiry_str = "Never"
 
-                if reply == QMessageBox.Yes:
-                    # Pass the stored master password explicitly
-                    protect_key_with_master_password(self._master_password)
-                    # Set the context so the key can be loaded
-                    set_master_password_context(self._master_password)
-                    QMessageBox.information(
-                        self,
-                        "Success",
-                        "Key protection enabled. Your vault key is now encrypted with your master password.",
-                    )
-                    self.update_key_protection_status()
-                    self.update_system_info()
-                    self.statusBar().showMessage("Key protection enabled")
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Failed to toggle key protection: {str(e)}"
-            )
+            # Set the items with appropriate colors - FIXED ID DISPLAY
+            id_item = QTableWidgetItem(str(entry_id))
+            id_item.setTextAlignment(
+                QtCoreQt.AlignmentFlag.AlignCenter
+            )  # Center the ID value
+            self.table.setItem(row, 0, id_item)
 
-    def update_data_persistence_widgets(self):
-        """Update data persistence checkbox state from settings."""
-        if not hasattr(self, "remove_on_uninstall_checkbox"):
-            return
+            website_item = QTableWidgetItem(website)
+            if favorite:
+                website_item.setForeground(QColor("#ffd700"))  # Gold for favorites
+            self.table.setItem(row, 1, website_item)
 
-        settings = config.load_settings()
-        remove_on_uninstall = settings.get("data_persistence", {}).get("remove_on_uninstall", False)
+            username_item = QTableWidgetItem(username)
+            self.table.setItem(row, 2, username_item)
 
-        # Block signals to avoid triggering the toggle handler
-        self.remove_on_uninstall_checkbox.blockSignals(True)
-        self.remove_on_uninstall_checkbox.setChecked(remove_on_uninstall)
-        self.remove_on_uninstall_checkbox.blockSignals(False)
+            password_item = QTableWidgetItem("••••••••")  # Mask password
+            password_item.setData(
+                QtCoreQt.ItemDataRole.UserRole, decrypted
+            )  # Store real password as data
+            password_item.setTextAlignment(
+                QtCoreQt.AlignmentFlag.AlignCenter
+            )  # Center the dots
+            self.table.setItem(row, 3, password_item)
 
-    def toggle_remove_on_uninstall(self, state):
-        """Handle data persistence setting change."""
+            category_item = QTableWidgetItem(category)
+            self.table.setItem(row, 4, category_item)
+
+            created_item = QTableWidgetItem(created_str)
+            created_item.setTextAlignment(
+                QtCoreQt.AlignmentFlag.AlignCenter
+            )  # Center the date
+            self.table.setItem(row, 5, created_item)
+
+            expiry_item = QTableWidgetItem(expiry_str)
+            expiry_item.setTextAlignment(
+                QtCoreQt.AlignmentFlag.AlignCenter
+            )  # Center the expiry info
+            if expiry and days_left is not None and days_left < 0:
+                expiry_item.setForeground(QColor("red"))
+            elif expiry and days_left is not None and days_left < 7:
+                expiry_item.setForeground(QColor("orange"))
+            self.table.setItem(row, 6, expiry_item)
+
+        self.statusBar().showMessage(f"{len(passwords)} passwords found")
+
+    def show_password_temporarily(self, row: int, col: int) -> None:
+        """Show password in plaintext temporarily, then hide it again."""
         try:
-            enabled = self.remove_on_uninstall_checkbox.isChecked()
+            entry_id = int(self.table.item(row, 0).text())
+            entries = get_passwords()
+            entry = next((e for e in entries if e[0] == entry_id), None)
 
-            # Update settings
-            config.update_settings({
-                "data_persistence": {
-                    "remove_on_uninstall": enabled
-                }
-            })
+            if not entry:
+                return
 
-            if enabled:
-                # Warn user about data removal
-                QMessageBox.warning(
-                    self,
-                    "Data Removal Warning",
-                    "⚠️ Data removal on uninstall is now ENABLED.\n\n"
-                    "When you uninstall this application via pip, all your:\n"
-                    "• Passwords and vault data\n"
-                    "• Encryption keys\n"
-                    "• Settings and configurations\n"
-                    "• Logs and backups\n\n"
-                    "will be PERMANENTLY DELETED.\n\n"
-                    "Make sure to export/backup your data before uninstalling!",
-                )
-                self.statusBar().showMessage("⚠️ Data will be removed on uninstall")
-            else:
-                self.statusBar().showMessage("✓ Data will persist through uninstalls (safe)")
+            decrypted = decrypt_password(entry[3])
+            password_item = self.table.item(row, col)
+
+            if password_item:
+                password_item.setText(decrypted)
+
+                # Store weak references to check validity before accessing
+                weak_password_item = weakref.ref(password_item)
+                weak_table = weakref.ref(self.table)
+
+                def hide_password():
+                    # Check if widgets still exist before accessing
+                    try:
+                        table = weak_table()
+                        item = weak_password_item()
+
+                        # Verify both table and item still exist
+                        if table is not None and item is not None:
+                            # Double-check item is still in the table at the same position
+                            current_item = table.item(row, col)
+                            if current_item is item:
+                                item.setText("••••••••")
+                    except (RuntimeError, AttributeError):
+                        # Item or table was deleted, ignore silently
+                        pass
+
+                # Create timer and store it
+                timer = QTimer(self)  # Parent to self for automatic cleanup
+                timer.setSingleShot(True)
+                timer.timeout.connect(hide_password)
+
+                # Remove timer from tracking list when it fires
+                def cleanup_timer():
+                    with self._lock:
+                        if timer in self._active_timers:
+                            self._active_timers.remove(timer)
+
+                timer.timeout.connect(cleanup_timer)
+
+                # Add to tracking list
+                with self._lock:
+                    self._active_timers.append(timer)
+
+                timer.start(3000)
 
         except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Failed to update data persistence setting: {str(e)}"
-            )
-
-
-def main():
-    """Entry point for the GUI application."""
-    app = QApplication(sys.argv)
-
-    window = PasswordManagerApp()
-    window.show()
-    sys.exit(app.exec_())
-
-
-if __name__ == "__main__":
-    main()
+            log_warning(f"Error showing password temporarily: {e}")

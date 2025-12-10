@@ -253,7 +253,6 @@ def test_delete_password_history(test_db):
     assert len(history) == 0, "History should be deleted"
 
 
-@pytest.mark.skip(reason="Qt timer race condition in CI - QTableWidgetItem deletion issue")
 def test_password_history_with_zero_max_versions(test_db):
     """Test that setting max_versions to 0 disables retention limit."""
     # Disable retention limit by updating config before adding password

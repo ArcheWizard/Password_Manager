@@ -68,7 +68,6 @@ def test_switch_back_to_file_mode_restores_secret_key(
     assert decrypt_password(rows[0][3]) == original
 
 
-@pytest.mark.skip(reason="Qt timer race condition in CI - QTableWidgetItem deletion issue")
 def test_apply_kdf_parameters_updates_iterations(clean_crypto_files, clean_database):
     password = "s3cure-passphrase"
     set_master_password(password)
@@ -93,7 +92,6 @@ def test_apply_kdf_parameters_updates_iterations(clean_crypto_files, clean_datab
     assert decrypt_password(rows[0][3]) == original
 
 
-@pytest.mark.skip(reason="Qt timer race condition in CI - QTableWidgetItem deletion issue")
 def test_benchmark_kdf_returns_samples():
     result = benchmark_kdf(target_ms=60, max_iterations=120_000)
     assert result["recommended_iterations"] <= 120_000

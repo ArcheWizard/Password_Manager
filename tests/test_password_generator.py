@@ -162,7 +162,6 @@ def test_generate_pattern_password_with_repetition():
     assert password[8:].isdigit()
 
 
-@pytest.mark.skip(reason="Qt timer race condition in CI - QTableWidgetItem deletion issue")
 def test_generate_password_random_style():
     """Test generate_password with random style."""
     password = generate_password(
