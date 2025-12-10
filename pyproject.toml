@@ -1,30 +1,32 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "secure-password-manager"
 dynamic = ["version"]
-authors = [
-    {name = "ArcheWizard", email = "faress22.dadi@gmail.com"},
-]
-description = "A secure local password manager with strong encryption"
+description = "A secure, local-first password manager with browser integration"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
-keywords = ["password", "manager", "security", "encryption", "2fa"]
+authors = [
+    {name = "ArcheWizard", email = "your.email@example.com"}
+]
+keywords = [
+    "password-manager",
+    "security",
+    "encryption",
+    "local-first",
+    "browser-extension"
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent",
-    "Development Status :: 4 - Beta",
     "Topic :: Security",
     "Topic :: Utilities",
-    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "cryptography>=41.0.0",
@@ -46,6 +48,9 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-qt>=4.2.0",
+    "pytest-env>=1.1.0",
+    "httpx>=0.24.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
 ]
@@ -73,15 +78,25 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -p pytestqt"
+qt_api = "pyqt5"
+# Set Qt platform for headless testing
+env = [
+    "QT_QPA_PLATFORM=offscreen",
+    "PYTEST_QT_API=pyqt5"
+]
 
 [tool.black]
 line-length = 88
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ['py38']
 include = '\.pyi?$'
 
 [tool.ruff]
 line-length = 88
 target-version = "py38"
-select = ["E", "F", "W", "I", "N", "UP"]
-ignore = []
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

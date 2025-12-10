@@ -21,6 +21,14 @@ from secure_password_manager.utils.approval_manager import (
 )
 from secure_password_manager.utils.crypto import decrypt_password, encrypt_password
 from secure_password_manager.utils.database import add_password, get_passwords
+from secure_password_manager.utils.domain_socket import (
+    cleanup_socket,
+    create_socket_server,
+    get_socket_path,
+    is_socket_available,
+    receive_message,
+    send_message,
+)
 from secure_password_manager.utils.logger import log_info, log_warning
 from secure_password_manager.utils.paths import get_browser_bridge_tokens_path
 from secure_password_manager.utils.payload_encryption import create_payload_encryptor
@@ -106,11 +114,12 @@ class TokenStore:
 class BrowserBridgeService:
     """Encapsulates the FastAPI server and token logic."""
 
-    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, enable_tls: Optional[bool] = None) -> None:
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, enable_tls: Optional[bool] = None, enable_domain_socket: Optional[bool] = None) -> None:
         settings = config.load_settings().get("browser_bridge", {})
         self.host = host or settings.get("host", "127.0.0.1")
         self.port = port or int(settings.get("port", 43110))
         self.enable_tls = enable_tls if enable_tls is not None else settings.get("enable_tls", False)
+        self.enable_domain_socket = enable_domain_socket if enable_domain_socket is not None else settings.get("enable_domain_socket", False)
         ttl_hours = int(settings.get("token_ttl_hours", 24))
         self._token_store = TokenStore(get_browser_bridge_tokens_path(), ttl_hours)
         self._pairing_window_seconds = int(settings.get("pairing_window_seconds", 120))
@@ -127,6 +136,11 @@ class BrowserBridgeService:
         self._app = self._build_app()
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None
+
+        # Domain socket support
+        self._socket_server: Optional[Any] = None
+        self._socket_thread: Optional[threading.Thread] = None
+        self._socket_path = get_socket_path() if is_socket_available() else None
 
     @property
     def app(self) -> FastAPI:
@@ -438,12 +452,143 @@ class BrowserBridgeService:
 
     @property
     def is_running(self) -> bool:
-        return bool(self._server and self._thread and self._thread.is_alive())
+        http_running = bool(self._server and self._thread and self._thread.is_alive())
+        socket_running = bool(self._socket_server and self._socket_thread and self._socket_thread.is_alive())
+        return http_running or socket_running
+
+    def _handle_socket_request(self, conn: Any) -> None:
+        """Handle a single domain socket connection."""
+        try:
+            # Receive request
+            request = receive_message(conn, timeout=30.0)
+
+            # Route request based on path/action
+            path = request.get("path", "")
+            method = request.get("method", "GET")
+            headers = request.get("headers", {})
+            body = request.get("body", {})
+
+            # Process request through FastAPI app endpoints
+            # For now, handle the most common endpoints directly
+            response = {"status_code": 404, "body": {"detail": "Not found"}}
+
+            if path == "/v1/pair" and method == "POST":
+                # Handle pairing
+                try:
+                    pair_request = PairingRequest(**body)
+                    if not self._pairing or time.time() > self._pairing["expires_at"]:
+                        response = {"status_code": 400, "body": {"detail": "No active pairing code"}}
+                    elif self._pairing["code"] != pair_request.code:
+                        response = {"status_code": 403, "body": {"detail": "Invalid pairing code"}}
+                    else:
+                        record = self._token_store.issue_token(pair_request.fingerprint, pair_request.browser)
+                        self._pairing = None
+                        response = {"status_code": 200, "body": {
+                            "token": record["token"],
+                            "expires_at": record["expires_at"],
+                        }}
+                except Exception as e:
+                    response = {"status_code": 400, "body": {"detail": str(e)}}
+
+            elif path == "/v1/credentials/query" and method == "POST":
+                # Handle credentials query
+                auth_header = headers.get("authorization", "")
+                if not auth_header.startswith("Bearer "):
+                    response = {"status_code": 401, "body": {"detail": "Missing authorization"}}
+                else:
+                    token_str = auth_header.split(" ", 1)[1].strip()
+                    token_rec = self._token_store.validate(token_str)
+                    if not token_rec:
+                        response = {"status_code": 401, "body": {"detail": "Invalid or expired token"}}
+                    else:
+                        try:
+                            query = CredentialsQueryRequest(**body)
+                            # Process credentials query (simplified version)
+                            origin = query.origin
+                            entries = []
+
+                            origin_domain = origin.replace("https://", "").replace("http://", "").split("/")[0]
+                            origin_name = origin_domain.split(".")[0] if "." in origin_domain else origin_domain
+
+                            for entry in get_passwords():
+                                (_entry_id, website, username, encrypted, _category, _notes,
+                                 _created, _updated, _expiry, _favorite) = entry
+                                site = (website or "").lower()
+                                notes = (_notes or "").lower()
+
+                                if not (origin in site or origin_domain in site or origin_name in site or
+                                       origin in notes or origin_domain in notes):
+                                    continue
+
+                                try:
+                                    password = decrypt_password(encrypted)
+                                    entries.append({
+                                        "entry_id": _entry_id,
+                                        "website": website,
+                                        "username": username,
+                                        "password": password,
+                                    })
+                                except Exception:
+                                    continue
+
+                            # Request approval
+                            approval_manager = get_approval_manager()
+                            username_preview = entries[0]["username"] if entries else None
+                            approval_response = approval_manager.request_approval(
+                                origin=origin,
+                                browser=token_rec.get("browser", "unknown"),
+                                fingerprint=token_rec["fingerprint"],
+                                entry_count=len(entries),
+                                username_preview=username_preview,
+                            )
+
+                            if approval_response.decision == ApprovalDecision.APPROVED:
+                                response = {"status_code": 200, "body": {"credentials": entries}}
+                            else:
+                                response = {"status_code": 403, "body": {"detail": "User denied access"}}
+                        except Exception as e:
+                            response = {"status_code": 500, "body": {"detail": str(e)}}
+
+            # Send response
+            send_message(conn, response)
+
+        except Exception as e:
+            log_warning(f"Error handling socket request: {e}")
+            try:
+                send_message(conn, {"status_code": 500, "body": {"detail": "Internal server error"}})
+            except Exception:
+                pass
+        finally:
+            conn.close()
+
+    def _run_socket_server(self) -> None:
+        """Run the domain socket server loop."""
+        if not self._socket_server or not self._socket_path:
+            return
+
+        log_info(f"Domain socket server listening on {self._socket_path}")
+
+        while self._socket_server:
+            try:
+                conn, _ = self._socket_server.accept()
+                # Handle each connection in a separate thread
+                handler_thread = threading.Thread(
+                    target=self._handle_socket_request,
+                    args=(conn,),
+                    daemon=True
+                )
+                handler_thread.start()
+            except OSError:
+                # Socket closed or error
+                break
+            except Exception as e:
+                log_warning(f"Socket server error: {e}")
 
     def start(self) -> None:
         if self.is_running:
             return
 
+        # Start HTTP/HTTPS server
         # Configure TLS if enabled
         if self.enable_tls and self._cert_path and self._key_path:
             log_info(f"Browser bridge TLS enabled with certificate fingerprint: {self._cert_fingerprint}")
@@ -474,13 +619,41 @@ class BrowserBridgeService:
         protocol = "https" if self.enable_tls else "http"
         log_info(f"Browser bridge started on {protocol}://{self.host}:{self.port}")
 
+        # Start domain socket server if enabled
+        if self.enable_domain_socket and is_socket_available() and self._socket_path:
+            try:
+                self._socket_server = create_socket_server(self._socket_path)
+                self._socket_thread = threading.Thread(target=self._run_socket_server, daemon=True)
+                self._socket_thread.start()
+                log_info(f"Domain socket bridge started on {self._socket_path}")
+            except Exception as e:
+                log_warning(f"Failed to start domain socket server: {e}")
+
     def stop(self) -> None:
+        # Stop HTTP server
         if self._server:
             self._server.should_exit = True
         if self._thread:
             self._thread.join(timeout=3)
             self._thread = None
         self._server = None
+
+        # Stop domain socket server
+        if self._socket_server:
+            try:
+                self._socket_server.close()
+            except Exception as e:
+                log_warning(f"Error closing socket server: {e}")
+            self._socket_server = None
+
+        if self._socket_thread:
+            self._socket_thread.join(timeout=3)
+            self._socket_thread = None
+
+        # Cleanup socket file
+        if self._socket_path:
+            cleanup_socket(self._socket_path)
+
         log_info("Browser bridge stopped")
 
     def generate_pairing_code(self) -> Dict[str, Any]:
