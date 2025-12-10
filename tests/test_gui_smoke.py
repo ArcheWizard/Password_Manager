@@ -296,12 +296,17 @@ def test_browser_bridge_toggle(gui_app, qtbot):
     assert gui_app.browser_bridge_service.is_running == initial_running
 
 
-def test_backup_create_dialog(gui_app, qtbot, monkeypatch):
+def test_backup_create_dialog(gui_app, qtbot, monkeypatch, tmp_path):
     """Test backup creation dialog."""
+    # Use pytest's tmp_path for cross-platform compatibility
+    backup_dir = tmp_path / "backup_dir"
+    backup_dir.mkdir()
+    backup_file = backup_dir / "backup.db.enc"
+
     # Mock file dialog to return a backup directory
     monkeypatch.setattr(
         "secure_password_manager.apps.gui.QFileDialog.getExistingDirectory",
-        lambda *args, **kwargs: "/tmp/backup_dir"
+        lambda *args, **kwargs: str(backup_dir)
     )
 
     # Mock QInputDialog to avoid blocking on password prompt
@@ -310,8 +315,8 @@ def test_backup_create_dialog(gui_app, qtbot, monkeypatch):
         lambda *args, **kwargs: ("test_password", True)
     )
 
-    # Mock backup function
-    with patch("secure_password_manager.utils.backup.create_full_backup", return_value="/tmp/backup.db.enc"):
+    # Mock backup function at the import location within the method
+    with patch("secure_password_manager.utils.backup.create_full_backup", return_value=str(backup_file)):
         gui_app.create_full_backup()
         # Wait for any pending events
         qtbot.wait(50)
@@ -319,12 +324,15 @@ def test_backup_create_dialog(gui_app, qtbot, monkeypatch):
         # Should complete without error or blocking
 
 
-def test_export_passwords_dialog(gui_with_entries, qtbot, monkeypatch):
+def test_export_passwords_dialog(gui_with_entries, qtbot, monkeypatch, tmp_path):
     """Test password export dialog."""
+    # Use pytest's tmp_path for cross-platform compatibility
+    export_file = tmp_path / "export.json"
+
     # Mock file dialog to return a file path
     monkeypatch.setattr(
         "secure_password_manager.apps.gui.QFileDialog.getSaveFileName",
-        lambda *args, **kwargs: ("/tmp/export.json", "*.json")
+        lambda *args, **kwargs: (str(export_file), "*.json")
     )
 
     # Mock QInputDialog to avoid blocking on password prompt
@@ -333,15 +341,13 @@ def test_export_passwords_dialog(gui_with_entries, qtbot, monkeypatch):
         lambda *args, **kwargs: ("test_password", True)
     )
 
-    # Mock export function
+    # Mock export function at the import location
     with patch("secure_password_manager.utils.backup.export_passwords", return_value=True):
         gui_with_entries.export_passwords()
         # Wait for any pending events
         qtbot.wait(50)
         QApplication.processEvents()
         # Should complete without error or blocking
-
-
 def test_table_sorting(gui_with_entries, qtbot):
     """Test that table columns can be sorted."""
     table = gui_with_entries.table
@@ -452,12 +458,16 @@ def test_toggle_favorite_marks_entry(gui_with_entries, qtbot):
         assert True
 
 
-def test_import_passwords_dialog(gui_app, qtbot, monkeypatch):
+def test_import_passwords_dialog(gui_app, qtbot, monkeypatch, tmp_path):
     """Test password import dialog."""
+    # Use pytest's tmp_path for cross-platform compatibility
+    import_file = tmp_path / "import.dat"
+    import_file.write_text("test data")  # Create the file
+
     # Mock file dialog to return a file path
     monkeypatch.setattr(
         "secure_password_manager.apps.gui.QFileDialog.getOpenFileName",
-        lambda *args, **kwargs: ("/tmp/import.dat", "*.dat")
+        lambda *args, **kwargs: (str(import_file), "*.dat")
     )
 
     # Mock QInputDialog to avoid blocking on password prompt
@@ -478,12 +488,16 @@ def test_import_passwords_dialog(gui_app, qtbot, monkeypatch):
         assert True
 
 
-def test_restore_from_backup_dialog(gui_app, qtbot, monkeypatch):
+def test_restore_from_backup_dialog(gui_app, qtbot, monkeypatch, tmp_path):
     """Test restore from backup dialog."""
+    # Use pytest's tmp_path for cross-platform compatibility
+    backup_file = tmp_path / "backup.db.enc"
+    backup_file.write_bytes(b"test backup data")  # Create the file
+
     # Mock file dialog to return a file path
     monkeypatch.setattr(
         "secure_password_manager.apps.gui.QFileDialog.getOpenFileName",
-        lambda *args, **kwargs: ("/tmp/backup.db.enc", "*.enc")
+        lambda *args, **kwargs: (str(backup_file), "*.enc")
     )
 
     # Mock QInputDialog to avoid blocking on password prompt
