@@ -50,6 +50,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-qt>=4.2.0",
     "pytest-env>=1.1.0",
+    "pytest-timeout>=2.1.0",
     "httpx>=0.24.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
@@ -78,8 +79,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short -p pytestqt"
+addopts = "-v --tb=short -p pytestqt --timeout=300"
 qt_api = "pyqt5"
+timeout = 300  # 5 minute timeout per test
+qt_no_wait = true  # Don't wait for Qt events in CI
 # Set Qt platform for headless testing
 env = [
     "QT_QPA_PLATFORM=offscreen",

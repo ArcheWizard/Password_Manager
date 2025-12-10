@@ -27,9 +27,18 @@ from secure_password_manager.utils.domain_socket import (
 @pytest.fixture
 def temp_socket_dir(tmp_path):
     """Create a temporary directory for socket testing."""
-    socket_dir = tmp_path / "sockets"
-    socket_dir.mkdir()
-    return socket_dir
+    # Use /tmp on Unix systems to avoid macOS socket path length limit (104 chars)
+    if os.name != "nt":
+        import tempfile
+        socket_dir = Path(tempfile.mkdtemp(prefix="pwmgr_"))
+    else:
+        socket_dir = tmp_path / "sockets"
+        socket_dir.mkdir()
+    yield socket_dir
+    # Cleanup
+    if socket_dir.exists():
+        import shutil
+        shutil.rmtree(socket_dir, ignore_errors=True)
 
 
 @pytest.fixture
