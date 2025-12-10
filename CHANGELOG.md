@@ -2,6 +2,18 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [1.10.4] - 2025-12-10
+
+### Fixed
+
+- **CI/CD**: Fixed Windows GitHub Actions test failures by replacing hardcoded Unix `/tmp/` paths with cross-platform `tmp_path` pytest fixture.
+- **Tests**: Updated GUI smoke tests (`test_gui_smoke.py`) to use platform-agnostic temporary directories for backup, export, import, and restore operations.
+- **Cross-Platform Compatibility**: All tests now pass successfully on Windows, macOS, and Linux.
+
+### Changed
+
+- Modified test fixtures in `test_backup_create_dialog`, `test_export_passwords_dialog`, `test_import_passwords_dialog`, and `test_restore_from_backup_dialog` to accept `tmp_path` parameter for better cross-platform support.
+
 ## [1.10.3] - 2025-12-09
 
 ### Fixed

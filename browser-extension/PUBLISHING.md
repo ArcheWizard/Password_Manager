@@ -4,7 +4,7 @@ This guide covers the steps to publish the Secure Password Manager browser exten
 
 ## Version
 
-Current version: **1.10.3**
+Current version: **1.10.4**
 
 ## Prerequisites
 

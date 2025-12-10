@@ -6,7 +6,7 @@ Authoritative instructions for producing, verifying, and shipping Secure Passwor
 
 - Target: quarterly feature releases, monthly maintenance updates as needed.
 - Versioning: semantic (`MAJOR.MINOR.PATCH`).
-- Current version: 1.10.1
+- Current version: 1.10.4
 - Source of truth: `VERSION.txt` (mirrored in `pyproject.toml` and `__init__.py`).
 
 ## Pre-Release Checklist
