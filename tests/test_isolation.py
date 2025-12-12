@@ -14,16 +14,14 @@ from secure_password_manager.utils.crypto import (
     protect_key_with_master_password,
 )
 from secure_password_manager.utils.database import add_password, init_db
-from secure_password_manager.utils.paths import (
-    get_data_dir,
-    get_database_path,
-    get_secret_key_path,
-)
+# Import module, not functions
+from secure_password_manager.utils import paths
 
 
 def test_isolation_uses_temp_directory(test_env):
     """Verify that test environment uses temporary directory, not production."""
-    data_dir = get_data_dir()
+    # Use module.function() syntax to get monkeypatched version
+    data_dir = paths.get_data_dir()
 
     # Should be in temp directory
     assert "/tmp" in str(data_dir) or "temp" in str(data_dir).lower()
@@ -40,8 +38,8 @@ def test_crypto_backup_files_in_isolation(isolated_environment):
     generate_key()
     protect_key_with_master_password("test_password123")
 
-    data_dir = get_data_dir()
-    key_path = get_secret_key_path()
+    data_dir = paths.get_data_dir()
+    key_path = paths.get_secret_key_path()
 
     # Check for any .bak files created
     bak_files = list(data_dir.glob("secret.key.bak*"))
@@ -59,8 +57,8 @@ def test_crypto_backup_files_in_isolation(isolated_environment):
 def test_multiple_tests_dont_interfere(test_env, clean_crypto_files, clean_database):
     """Verify each test gets a clean environment."""
     # This test should see no existing files
-    key_path = get_secret_key_path()
-    db_path = get_database_path()
+    key_path = paths.get_secret_key_path()
+    db_path = paths.get_database_path()
 
     assert not key_path.exists(), "Key file should not exist in clean environment"
 
@@ -73,7 +71,7 @@ def test_multiple_tests_dont_interfere(test_env, clean_crypto_files, clean_datab
     assert key_path.exists()
     assert db_path.exists()
 
-    data_dir = get_data_dir()
+    data_dir = paths.get_data_dir()
     assert data_dir in key_path.parents
 
 
@@ -88,7 +86,7 @@ def test_database_isolation(isolated_environment):
     encrypted = encrypt_password("test_password")
     add_password("test.com", "user", encrypted)
 
-    db_path = get_database_path()
+    db_path = paths.get_database_path()
 
     # Database should be in temp directory
     assert "/tmp" in str(db_path) or "temp" in str(db_path).lower()
@@ -100,7 +98,7 @@ def test_database_isolation(isolated_environment):
 
 def test_cleanup_removes_all_files(test_env):
     """Verify cleanup fixture removes all generated files."""
-    data_dir = get_data_dir()
+    data_dir = paths.get_data_dir()
 
     # Create some files
     (data_dir / "secret.key").write_text("test key")
@@ -142,7 +140,10 @@ def test_production_data_untouched(isolated_environment):
     init_db()
     protect_key_with_master_password("test123")
 
-    from secure_password_manager.utils.crypto import encrypt_password
+    from secure_password_manager.utils.crypto import encrypt_password, set_master_password_context
+
+    # Set context before encrypting (needed for password-derived mode)
+    set_master_password_context("test123")
     encrypted = encrypt_password("password")
     add_password("example.com", "user", encrypted)
 
@@ -158,44 +159,27 @@ def test_production_data_untouched(isolated_environment):
 
         # No .bak files should be created
         bak_files = [f for f in production_data.iterdir() if ".bak" in f.name]
-        bak_files_names = {f.name for f in bak_files}
-        new_bak_files = bak_files_names - production_files_before
-        assert not new_bak_files, f"Test created .bak files in production: {new_bak_files}"
+        assert not bak_files, f"Test created backup files in production: {bak_files}"
 
 
 def test_path_functions_return_temp_paths(test_env):
     """Verify all path functions return temp paths, not production."""
-    from secure_password_manager.utils.paths import (
-        get_auth_json_path,
-        get_backup_dir,
-        get_breach_cache_path,
-        get_browser_bridge_tokens_path,
-        get_cache_dir,
-        get_config_dir,
-        get_crypto_salt_path,
-        get_database_path,
-        get_log_dir,
-        get_secret_key_enc_path,
-        get_secret_key_path,
-        get_totp_config_path,
-    )
-
     production_data = Path(__file__).parent.parent / ".data"
 
     paths_to_check = [
-        get_data_dir(),
-        get_config_dir(),
-        get_cache_dir(),
-        get_log_dir(),
-        get_database_path(),
-        get_secret_key_path(),
-        get_secret_key_enc_path(),
-        get_crypto_salt_path(),
-        get_auth_json_path(),
-        get_totp_config_path(),
-        get_backup_dir(),
-        get_breach_cache_path(),
-        get_browser_bridge_tokens_path(),
+        paths.get_data_dir(),
+        paths.get_config_dir(),
+        paths.get_cache_dir(),
+        paths.get_log_dir(),
+        paths.get_database_path(),
+        paths.get_secret_key_path(),
+        paths.get_secret_key_enc_path(),
+        paths.get_crypto_salt_path(),
+        paths.get_auth_json_path(),
+        paths.get_totp_config_path(),
+        paths.get_backup_dir(),
+        paths.get_breach_cache_path(),
+        paths.get_browser_bridge_tokens_path(),
     ]
 
     for path in paths_to_check:

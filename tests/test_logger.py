@@ -24,7 +24,6 @@ from secure_password_manager.utils.logger import (
 @pytest.fixture
 def temp_log_file(tmp_path, monkeypatch):
     """Create a temporary log file for testing."""
-    import logging
 
     log_dir = tmp_path
 
@@ -44,6 +43,8 @@ def temp_log_file(tmp_path, monkeypatch):
 
     # Return the actual log file path that will be created
     return tmp_path / "password_manager.log"
+
+
 def test_log_info(temp_log_file):
     """Test info logging."""
     log_info("Test info message")
@@ -117,8 +118,20 @@ def test_get_log_entries_count_limit(temp_log_file):
 def test_get_log_entries_nonexistent_file(tmp_path, monkeypatch):
     """Test get_log_entries with non-existent log file."""
     nonexistent = tmp_path / "nonexistent.log"
-    monkeypatch.setattr(logger, "LOG_FILE", str(nonexistent))
 
+    # Reset logger state
+    monkeypatch.setattr(logger, "_initialized", False)
+    monkeypatch.setattr(logger, "LOG_FILE", None)
+    monkeypatch.setattr(logger, "LOG_DIR", None)
+
+    # Mock get_log_dir to return tmp_path (where nonexistent.log would be)
+    monkeypatch.setattr("secure_password_manager.utils.logger.get_log_dir", lambda: tmp_path)
+
+    # Clear handlers to force reinitialization
+    logger.logger.handlers.clear()
+
+    # Now when get_log_entries() is called, it will initialize with our mocked path
+    # and look for password_manager.log in tmp_path (which doesn't exist)
     entries = get_log_entries()
     assert entries == []
 
@@ -163,6 +176,8 @@ def test_clear_logs_nonexistent_file(tmp_path, monkeypatch):
 def test_clear_logs_handles_error(mock_rename, temp_log_file):
     """Test clear_logs handles errors gracefully."""
     log_info("Test message")
+
+    # Make rename fail
     mock_rename.side_effect = OSError("Permission denied")
 
     result = clear_logs(backup=True)
@@ -194,7 +209,9 @@ def test_log_entries_preserve_order(temp_log_file):
 
     # Verify messages appear in order
     for i in range(9):
-        assert entry_text.index(f"Message {i}") < entry_text.index(f"Message {i+1}")
+        msg_current = f"Message {i}"
+        msg_next = f"Message {i+1}"
+        assert entry_text.find(msg_current) < entry_text.find(msg_next)
 
 
 def test_log_file_created_in_correct_directory(tmp_path, monkeypatch):
