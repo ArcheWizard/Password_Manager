@@ -49,6 +49,11 @@ else:
 @pytest.fixture
 def gui_app(qtbot, clean_crypto_files, clean_database, monkeypatch):
     """Create GUI application for testing."""
+    from secure_password_manager.utils.crypto import generate_key
+
+    # Generate encryption key first
+    generate_key()
+
     # Initialize database
     init_db()
 

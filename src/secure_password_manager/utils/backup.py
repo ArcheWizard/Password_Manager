@@ -1,11 +1,29 @@
-"""Backup and restore utilities."""
+"""Backup and restore utilities.
 
+This module provides safe, atomic operations for:
+- Exporting passwords to encrypted files
+- Importing passwords from encrypted files
+- Creating full system backups
+- Restoring from backups
+
+Key design principles:
+1. One database connection per operation
+2. Explicit transaction boundaries
+3. Proper resource cleanup via context managers
+4. Validation before mutation
+5. Atomic operations with rollback on failure
+"""
+
+import contextlib
 import json
 import os
 import shutil
+import sqlite3
+import tempfile
 import time
 import zipfile
-from typing import Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 from secure_password_manager.utils.crypto import (
     decrypt_password,
@@ -13,33 +31,94 @@ from secure_password_manager.utils.crypto import (
     encrypt_password,
     encrypt_with_password_envelope,
 )
-from secure_password_manager.utils.database import (
-    add_category,
-    get_categories,
-    get_passwords,
+from secure_password_manager.utils.database import add_category, get_categories, get_passwords
+from secure_password_manager.utils.logger import log_error, log_info, log_warning
+from secure_password_manager.utils.paths import (
+    get_auth_json_path,
+    get_crypto_salt_path,
+    get_database_path,
+    get_secret_key_path,
 )
-from secure_password_manager.utils.logger import log_error, log_info
 
+
+# Constants
+EXPORT_VERSION = "2.0"
+BACKUP_VERSION = "2.0"
+DEFAULT_TIMEOUT = 30.0  # seconds
+
+
+class BackupError(Exception):
+    """Base exception for backup operations."""
+    pass
+
+
+class ImportError(Exception):
+    """Base exception for import operations."""
+    pass
+
+
+# ============================================================================
+# EXPORT OPERATIONS
+# ============================================================================
 
 def export_passwords(
-    filename: str, master_password: str, include_notes: bool = True
+    filename: str,
+    master_password: str,
+    include_notes: bool = True
 ) -> bool:
-    """Export passwords to an encrypted JSON file."""
-    passwords = get_passwords()
-    if not passwords:
+    """Export passwords to an encrypted file.
+
+    Args:
+        filename: Path to export file (will add .dat extension if missing)
+        master_password: Password to encrypt the export
+        include_notes: Whether to include notes field
+
+    Returns:
+        True if export succeeded, False otherwise
+
+    Raises:
+        BackupError: If export fails critically
+    """
+    try:
+        # Ensure .dat extension
+        if not filename.endswith('.dat'):
+            filename = f"{filename}.dat"
+
+        # Fetch all passwords (single query, one connection)
+        passwords = get_passwords()
+
+        if not passwords:
+            log_warning("Export aborted: vault is empty")
+            return False
+
+        # Build export structure
+        export_data = _build_export_data(passwords, include_notes)
+
+        # Encrypt and write atomically
+        _write_encrypted_export(filename, export_data, master_password)
+
+        log_info(f"Exported {len(passwords)} passwords to {filename}")
+        return True
+
+    except Exception as e:
+        log_error(f"Export failed: {e}")
+        # Clean up partial file
+        if os.path.exists(filename):
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
         return False
 
-    export_data = {
-        "metadata": {
-            "version": "2.0",
-            "exported_at": int(time.time()),
-            "entry_count": len(passwords),
-        },
-        "entries": [],
-    }
+
+def _build_export_data(
+    passwords: List[Tuple],
+    include_notes: bool
+) -> Dict:
+    """Build the export data structure."""
+    entries = []
 
     for entry in passwords:
-        # Map column indices to names for clarity
         (
             entry_id,
             website,
@@ -53,7 +132,10 @@ def export_passwords(
             favorite,
         ) = entry
 
+        # Decrypt password
         password = decrypt_password(encrypted)
+
+        # Build entry dict
         entry_data = {
             "website": website,
             "username": username,
@@ -65,188 +147,274 @@ def export_passwords(
         }
 
         if include_notes:
-            entry_data["notes"] = notes
+            entry_data["notes"] = notes or ""
 
         if expiry:
             entry_data["expiry_date"] = expiry
 
-        export_data["entries"].append(entry_data)
+        entries.append(entry_data)
 
-    # Export categories as well
+    # Get categories
     categories = get_categories()
-    export_data["categories"] = [
-        {"name": name, "color": color} for name, color in categories
-    ]
 
-    # Encrypt using envelope format (integrity HMAC)
-    blob = encrypt_with_password_envelope(json.dumps(export_data), master_password)
-    with open(filename, "wb") as f:
-        f.write(blob)
+    # Build final structure
+    return {
+        "metadata": {
+            "version": EXPORT_VERSION,
+            "exported_at": int(time.time()),
+            "entry_count": len(entries),
+        },
+        "categories": [
+            {"name": name, "color": color}
+            for name, color in categories
+        ],
+        "entries": entries,
+    }
 
-    # Log the export
-    log_info(f"Exported {len(passwords)} passwords to {filename}")
 
-    return True
+def _write_encrypted_export(
+    filename: str,
+    data: Dict,
+    master_password: str
+) -> None:
+    """Write encrypted export to file atomically."""
+    # Serialize to JSON
+    json_data = json.dumps(data, separators=(',', ':'))
 
+    # Encrypt with envelope (includes HMAC)
+    blob = encrypt_with_password_envelope(json_data, master_password)
+
+    # Write atomically (write to temp, then move)
+    temp_path = f"{filename}.tmp"
+    try:
+        with open(temp_path, 'wb') as f:
+            f.write(blob)
+        # Atomic move
+        os.replace(temp_path, filename)
+    except Exception as e:
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise BackupError(f"Failed to write export: {e}") from e
+
+
+# ============================================================================
+# IMPORT OPERATIONS
+# ============================================================================
 
 def import_passwords(filename: str, master_password: str) -> int:
-    """Import passwords from an encrypted JSON file. Returns count of imported items."""
-    import json
-    import sqlite3
-    import time
+    """Import passwords from an encrypted file.
 
-    from secure_password_manager.utils.database import _get_db_file
-    from secure_password_manager.utils.logger import log_error, log_info
-
-    if not os.path.exists(filename):
-        log_error(f"Import failed: File {filename} not found")
-        return 0
-
-    try:
-        with open(filename, "rb") as f:
-            blob = f.read()
-
-        try:
-            json_data = decrypt_with_password_envelope(blob, master_password)
-            import_data = json.loads(json_data)
-        except Exception as e:
-            log_error(f"Decryption error: {e}")
-            return 0
-
-        # Check for expected format
-        if "entries" not in import_data:
-            # Try legacy format
-            if isinstance(import_data, list):
-                entries = import_data
-                version = "1.0"  # Legacy version
-            else:
-                raise ValueError("Invalid backup format")
-        else:
-            entries = import_data["entries"]
-            version = import_data.get("metadata", {}).get("version", "1.0")
-
-        # Import categories first if present
-        if "categories" in import_data:
-            for category in import_data["categories"]:
-                try:
-                    add_category(category["name"], category["color"])
-                except Exception:
-                    # Category already exists, skip
-                    pass
-
-        # Add each password individually to avoid transaction locks
-        # Bulk insert within a single transaction to minimize locks
-        count = 0
-        conn = sqlite3.connect(_get_db_file())
-        try:
-            cursor = conn.cursor()
-            now = int(time.time())
-            rows = []
-            for item in entries:
-                try:
-                    website = item["website"]
-                    username = item["username"]
-                    password = item["password"]
-
-                    category = item.get("category", "General")
-                    notes = item.get("notes", "")
-                    expiry_ts = item.get("expiry_date")
-
-                    encrypted = encrypt_password(password)
-                    created_at = item.get("created_at", now)
-                    updated_at = item.get("updated_at", now)
-                    expiry_date = expiry_ts if isinstance(expiry_ts, int) else None
-
-                    rows.append(
-                        (
-                            website,
-                            username,
-                            encrypted,
-                            category,
-                            notes,
-                            created_at,
-                            updated_at,
-                            expiry_date,
-                        )
-                    )
-                except Exception as e:
-                    log_error(f"Failed to parse item: {e}")
-            if rows:
-                cursor.executemany(
-                    """
-                    INSERT INTO passwords
-                    (website, username, password, category, notes, created_at, updated_at, expiry_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    rows,
-                )
-                conn.commit()
-                count = len(rows)
-        finally:
-            conn.close()
-
-        log_info(f"Imported {count} passwords from {filename} (format v{version})")
-        return count
-
-    except Exception as e:
-        log_error(f"Import error: {e}")
-        return 0
-
-
-def create_full_backup(backup_dir: str, master_password: str) -> Optional[str]:
-    """
-    Create a complete backup including database, keys, and config.
+    Args:
+        filename: Path to import file
+        master_password: Password to decrypt the import
 
     Returns:
-        Path to the backup zip file or None if failed
-    """
-    if not os.path.exists(backup_dir):
-        os.makedirs(backup_dir)
+        Number of passwords successfully imported
 
-    timestamp = int(time.time())
-    backup_filename = f"password_manager_backup_{timestamp}.zip"
-    backup_path = os.path.join(backup_dir, backup_filename)
+    Raises:
+        ImportError: If import fails critically
+    """
+    if not os.path.exists(filename):
+        log_error(f"Import failed: file not found: {filename}")
+        return 0
 
     try:
-        # Export passwords to a temporary file
-        temp_export = os.path.join(backup_dir, "passwords_export.dat")
-        export_passwords(temp_export, master_password)
+        # Read and decrypt file
+        import_data = _read_encrypted_import(filename, master_password)
 
-        # Create the backup zip
-        with zipfile.ZipFile(backup_path, "w") as backup_zip:
-            # Add the encrypted export
-            backup_zip.write(temp_export, "passwords_export.dat")
+        # Validate structure
+        entries, categories = _validate_import_data(import_data)
 
-            # Add the database file if it exists
-            if os.path.exists("passwords.db"):
-                backup_zip.write("passwords.db", "passwords.db")
+        if not entries:
+            log_warning("Import file contains no entries")
+            return 0
 
-            # Add the key file if it exists
-            if os.path.exists("secret.key"):
-                backup_zip.write("secret.key", "secret.key")
+        # Import categories first
+        _import_categories(categories)
 
-            # Add other config files
-            if os.path.exists("auth.json"):
-                backup_zip.write("auth.json", "auth.json")
+        # Import passwords in single transaction
+        imported_count = _import_entries(entries)
 
-            if os.path.exists("crypto.salt"):
-                backup_zip.write("crypto.salt", "crypto.salt")
+        # Get version from metadata if available (modern format)
+        if isinstance(import_data, dict):
+            version = import_data.get("metadata", {}).get("version", "1.0")
+        else:
+            version = "legacy"
 
-            # Add a metadata file
-            metadata = {
-                "version": "2.0",
-                "timestamp": timestamp,
-                "description": "Full password manager backup",
-            }
+        log_info(f"Imported {imported_count} passwords from {filename} (v{version})")
 
-            with open(os.path.join(backup_dir, "metadata.json"), "w") as meta_file:
-                json.dump(metadata, meta_file)
+        return imported_count
 
-            backup_zip.write(os.path.join(backup_dir, "metadata.json"), "metadata.json")
+    except Exception as e:
+        log_error(f"Import failed: {e}")
+        return 0
 
-        # Clean up temporary files
-        os.remove(temp_export)
-        os.remove(os.path.join(backup_dir, "metadata.json"))
+
+def _read_encrypted_import(filename: str, master_password: str) -> Dict:
+    """Read and decrypt import file."""
+    try:
+        with open(filename, 'rb') as f:
+            blob = f.read()
+
+        json_data = decrypt_with_password_envelope(blob, master_password)
+        return json.loads(json_data)
+
+    except Exception as e:
+        raise ImportError(f"Failed to decrypt import file: {e}") from e
+
+
+def _validate_import_data(data: Dict) -> Tuple[List[Dict], List[Dict]]:
+    """Validate import data structure and extract entries/categories.
+
+    Returns:
+        (entries, categories) tuple
+    """
+    # Handle legacy format (list of entries)
+    if isinstance(data, list):
+        return data, []
+
+    # Modern format with metadata
+    if "entries" not in data:
+        if isinstance(data, dict) and any(k in data for k in ["website", "username", "password"]):
+            # Single entry wrapped in dict
+            return [data], []
+        raise ImportError("Invalid backup format: missing 'entries' key")
+
+    entries = data["entries"]
+    categories = data.get("categories", [])
+
+    # Validate entries are list
+    if not isinstance(entries, list):
+        raise ImportError("Invalid backup format: 'entries' must be a list")
+
+    return entries, categories
+
+
+def _import_categories(categories: List[Dict]) -> None:
+    """Import categories (best-effort, ignore duplicates)."""
+    for category in categories:
+        try:
+            add_category(category["name"], category.get("color", "blue"))
+        except Exception:
+            # Category likely already exists, skip
+            pass
+
+
+def _import_entries(entries: List[Dict]) -> int:
+    """Import password entries in a single transaction.
+
+    Returns:
+        Number of entries successfully imported
+    """
+    db_path = str(get_database_path())
+
+    # Single connection for entire import
+    conn = sqlite3.connect(db_path, timeout=DEFAULT_TIMEOUT)
+    conn.execute("PRAGMA busy_timeout = 30000")
+
+    try:
+        cursor = conn.cursor()
+        now = int(time.time())
+
+        # Prepare batch insert
+        rows = []
+        for item in entries:
+            try:
+                row = _prepare_entry_row(item, now)
+                rows.append(row)
+            except Exception as e:
+                log_warning(f"Skipping invalid entry: {e}")
+                continue
+
+        # Batch insert in single transaction
+        cursor.executemany(
+            """
+            INSERT INTO passwords (
+                website, username, password, category, notes,
+                created_at, updated_at, expiry_date, favorite
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows
+        )
+
+        conn.commit()
+        return len(rows)
+
+    except sqlite3.Error as e:
+        conn.rollback()
+        raise ImportError(f"Database import failed: {e}") from e
+
+    finally:
+        conn.close()
+
+
+def _prepare_entry_row(item: Dict, default_time: int) -> Tuple:
+    """Prepare a single entry for insertion."""
+    # Required fields
+    website = item["website"]
+    username = item["username"]
+    password = item["password"]
+
+    # Optional fields with defaults
+    category = item.get("category", "General")
+    notes = item.get("notes", "")
+    created_at = item.get("created_at", default_time)
+    updated_at = item.get("updated_at", default_time)
+    expiry_date = item.get("expiry_date")
+    favorite = int(item.get("favorite", False))
+
+    # Validate expiry is int or None
+    if expiry_date is not None and not isinstance(expiry_date, int):
+        expiry_date = None
+
+    # Encrypt password
+    encrypted = encrypt_password(password)
+
+    return (
+        website,
+        username,
+        encrypted,
+        category,
+        notes,
+        created_at,
+        updated_at,
+        expiry_date,
+        favorite,
+    )
+
+
+# ============================================================================
+# FULL BACKUP OPERATIONS
+# ============================================================================
+
+def create_full_backup(backup_dir: str, master_password: str) -> Optional[str]:
+    """Create a complete backup including database, keys, and config.
+
+    Args:
+        backup_dir: Directory to store backup
+        master_password: Password to encrypt the password export
+
+    Returns:
+        Path to backup zip file, or None if failed
+    """
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+
+        timestamp = int(time.time())
+        backup_filename = f"password_manager_backup_{timestamp}.zip"
+        backup_path = os.path.join(backup_dir, backup_filename)
+
+        # Create backup in temp dir, then move to final location
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Export passwords
+            export_path = os.path.join(temp_dir, "passwords_export.dat")
+            if not export_passwords(export_path, master_password):
+                log_error("Failed to export passwords for backup")
+                return None
+
+            # Create backup zip
+            _create_backup_zip(backup_path, export_path, timestamp)
 
         log_info(f"Created full backup at {backup_path}")
         return backup_path
@@ -256,60 +424,106 @@ def create_full_backup(backup_dir: str, master_password: str) -> Optional[str]:
         return None
 
 
+def _create_backup_zip(zip_path: str, export_path: str, timestamp: int) -> None:
+    """Create backup zip with all necessary files."""
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as backup_zip:
+        # Add password export
+        backup_zip.write(export_path, "passwords_export.dat")
+
+        # Add system files
+        _add_file_to_zip(backup_zip, get_database_path(), "passwords.db")
+        _add_file_to_zip(backup_zip, get_secret_key_path(), "secret.key")
+        _add_file_to_zip(backup_zip, get_auth_json_path(), "auth.json")
+        _add_file_to_zip(backup_zip, get_crypto_salt_path(), "crypto.salt")
+
+        # Add metadata
+        metadata = {
+            "version": BACKUP_VERSION,
+            "timestamp": timestamp,
+            "description": "Full password manager backup",
+        }
+        backup_zip.writestr("metadata.json", json.dumps(metadata, indent=2))
+
+
+def _add_file_to_zip(zip_file: zipfile.ZipFile, source_path: Path, archive_name: str) -> None:
+    """Add file to zip if it exists."""
+    if source_path.exists():
+        zip_file.write(str(source_path), archive_name)
+
+
+# ============================================================================
+# RESTORE OPERATIONS
+# ============================================================================
+
 def restore_from_backup(backup_path: str, master_password: str) -> bool:
-    """
-    Restore from a full backup.
+    """Restore from a full backup.
+
+    Args:
+        backup_path: Path to backup zip file
+        master_password: Password to decrypt password export
 
     Returns:
-        True if restoration was successful
+        True if restore succeeded, False otherwise
     """
     if not os.path.exists(backup_path):
-        log_error(f"Restore failed: Backup file {backup_path} not found")
+        log_error(f"Restore failed: backup not found: {backup_path}")
         return False
 
     try:
-        # Create a temporary directory for extraction
-        temp_dir = os.path.join(os.path.dirname(backup_path), "temp_restore")
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        os.makedirs(temp_dir)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Extract backup
+            with zipfile.ZipFile(backup_path, 'r') as backup_zip:
+                backup_zip.extractall(temp_dir)
 
-        # Extract the backup
-        with zipfile.ZipFile(backup_path, "r") as backup_zip:
-            backup_zip.extractall(temp_dir)
+            # Validate backup
+            export_path = os.path.join(temp_dir, "passwords_export.dat")
+            if not os.path.exists(export_path):
+                log_error("Invalid backup: missing password export")
+                return False
 
-        # Check if this is a valid backup
-        if not os.path.exists(os.path.join(temp_dir, "passwords_export.dat")):
-            log_error("Invalid backup: missing passwords export")
-            shutil.rmtree(temp_dir)
-            return False
+            # Create timestamped backups of current files
+            backup_suffix = int(time.time())
+            _backup_current_files(backup_suffix)
 
-        # Create backups of current files
-        backup_suffix = int(time.time())
-        if os.path.exists("passwords.db"):
-            shutil.copy("passwords.db", f"passwords.db.bak{backup_suffix}")
+            # Restore files
+            _restore_files_from_temp(temp_dir)
 
-        if os.path.exists("secret.key"):
-            shutil.copy("secret.key", f"secret.key.bak{backup_suffix}")
-
-        if os.path.exists("auth.json"):
-            shutil.copy("auth.json", f"auth.json.bak{backup_suffix}")
-
-        if os.path.exists("crypto.salt"):
-            shutil.copy("crypto.salt", f"crypto.salt.bak{backup_suffix}")
-
-        # Restore files
-        for filename in ["passwords.db", "secret.key", "auth.json", "crypto.salt"]:
-            source_path = os.path.join(temp_dir, filename)
-            if os.path.exists(source_path):
-                shutil.copy(source_path, filename)
-
-        # Clean up
-        shutil.rmtree(temp_dir)
-
-        log_info(f"Successfully restored from backup {backup_path}")
+        log_info(f"Successfully restored from {backup_path}")
         return True
 
     except Exception as e:
         log_error(f"Restore failed: {e}")
         return False
+
+
+def _backup_current_files(suffix: int) -> None:
+    """Create backups of current files before restore."""
+    files_to_backup = [
+        get_database_path(),
+        get_secret_key_path(),
+        get_auth_json_path(),
+        get_crypto_salt_path(),
+    ]
+
+    for file_path in files_to_backup:
+        if file_path.exists():
+            backup_path = Path(f"{file_path}.bak{suffix}")
+            try:
+                shutil.copy(str(file_path), str(backup_path))
+            except Exception as e:
+                log_warning(f"Failed to backup {file_path}: {e}")
+
+
+def _restore_files_from_temp(temp_dir: str) -> None:
+    """Restore files from temporary extraction directory."""
+    file_mappings = {
+        "passwords.db": get_database_path(),
+        "secret.key": get_secret_key_path(),
+        "auth.json": get_auth_json_path(),
+        "crypto.salt": get_crypto_salt_path(),
+    }
+
+    for filename, dest_path in file_mappings.items():
+        source_path = os.path.join(temp_dir, filename)
+        if os.path.exists(source_path):
+            shutil.copy(source_path, str(dest_path))

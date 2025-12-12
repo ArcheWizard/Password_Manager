@@ -1,0 +1,39 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "85...100"
+
+  status:
+    project:
+      default:
+        target: 90%
+        threshold: 1%
+        base: auto
+        if_ci_failed: error
+
+    patch:
+      default:
+        target: 85%
+        threshold: 2%
+        base: auto
+        if_ci_failed: error
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+ignore:
+  - "tests/"
+  - "tests/**/*"
+  - "**/test_*.py"
+  - "**/__pycache__"
+  - "scripts/"
+  - "browser-extension/"
+  - "docs/"
+  - "htmlcov/"

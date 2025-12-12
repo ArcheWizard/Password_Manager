@@ -128,3 +128,4 @@ __pypackages__/
 .python-version
 .venv/
 .pypirc
+docs/coverage-improvement-plan.md

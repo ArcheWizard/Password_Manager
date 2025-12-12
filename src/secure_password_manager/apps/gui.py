@@ -1690,14 +1690,33 @@ class PasswordManagerApp(QMainWindow):
         if not ok or not password:
             return
 
-        count = import_passwords(filename, password)
-        if count > 0:
-            self.refresh_passwords()
-            QMessageBox.information(
-                self, "Success", f"Imported {count} passwords successfully"
-            )
-        else:
-            QMessageBox.warning(self, "Error", "Failed to import passwords")
+        # Show waiting cursor and process events
+        QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
+        self.statusBar().showMessage("Importing passwords...")
+
+        # Process events to show cursor change
+        QApplication.processEvents()
+
+        try:
+            from secure_password_manager.utils.backup import import_passwords
+            count = import_passwords(filename, password)
+
+            QApplication.restoreOverrideCursor()
+
+            if count > 0:
+                self.refresh_passwords()
+                QMessageBox.information(
+                    self, "Success", f"Imported {count} passwords successfully"
+                )
+                self.statusBar().showMessage(f"Imported {count} passwords")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to import passwords")
+                self.statusBar().showMessage("Import failed")
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
+            self.statusBar().showMessage("Import failed")
 
     def create_full_backup(self):
         """Create a full backup of all data"""

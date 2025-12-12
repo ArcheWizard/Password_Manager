@@ -80,6 +80,12 @@ def test_backup_and_restore(test_db):
     fd, backup_path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
 
+    # export_passwords adds .dat extension, so update the path
+    if not backup_path.endswith('.dat'):
+        backup_path_actual = backup_path + '.dat'
+    else:
+        backup_path_actual = backup_path
+
     try:
         # Add some test data
         passwords_to_add = []
@@ -104,11 +110,12 @@ def test_backup_and_restore(test_db):
         result = export_passwords(backup_path, master_pass)
         assert result is True
 
-        # Verify backup file exists
-        assert os.path.exists(backup_path)
-        assert os.path.getsize(backup_path) > 0
+        # Verify backup file exists (with .dat extension)
+        assert os.path.exists(backup_path_actual)
+        assert os.path.getsize(backup_path_actual) > 0
 
     finally:
-        # Clean up
-        if os.path.exists(backup_path):
-            os.remove(backup_path)
+        # Clean up both possible paths
+        for path in [backup_path, backup_path_actual]:
+            if os.path.exists(path):
+                os.remove(path)

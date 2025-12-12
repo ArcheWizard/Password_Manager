@@ -1,11 +1,27 @@
-"""Database utilities for Password Manager."""
+"""Database utilities for Password Manager.
+
+This module provides a centralized database interface with:
+- WAL mode for better concurrency
+- Connection pooling to prevent locks
+- Thread-safe operations
+- Proper transaction boundaries
+- Automatic cleanup
+"""
 
 import sqlite3
+import threading
 import time
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
-from secure_password_manager.utils.logger import log_info
+from secure_password_manager.utils import config
+from secure_password_manager.utils.logger import log_info, log_warning
 from secure_password_manager.utils.paths import get_database_path
+
+
+# Thread-local storage for connections
+_thread_local = threading.local()
+_connection_lock = threading.RLock()
 
 
 def _get_db_file() -> str:
@@ -13,62 +29,133 @@ def _get_db_file() -> str:
     return str(get_database_path())
 
 
+def _initialize_connection(conn: sqlite3.Connection) -> None:
+    """Initialize a database connection with optimal settings."""
+    # Enable WAL mode for better concurrency
+    conn.execute("PRAGMA journal_mode=WAL")
+
+    # Normal synchronous mode (faster while still safe with WAL)
+    conn.execute("PRAGMA synchronous=NORMAL")
+
+    # Enable foreign keys
+    conn.execute("PRAGMA foreign_keys=ON")
+
+    # Set busy timeout (30 seconds)
+    conn.execute("PRAGMA busy_timeout=30000")
+
+    # Optimize cache size (2MB)
+    conn.execute("PRAGMA cache_size=-2000")
+
+
+def _get_connection() -> sqlite3.Connection:
+    """Get or create a thread-local database connection.
+
+    Each thread gets its own connection to prevent lock contention.
+    Connections are cached per thread for performance.
+    """
+    if not hasattr(_thread_local, 'connection') or _thread_local.connection is None:
+        with _connection_lock:
+            conn = sqlite3.connect(_get_db_file(), timeout=30.0, check_same_thread=False)
+            _initialize_connection(conn)
+            _thread_local.connection = conn
+            log_info("Created new database connection for thread")
+
+    return _thread_local.connection
+
+
+def close_connection() -> None:
+    """Close the thread-local database connection.
+
+    This should be called when a thread is done with database operations,
+    especially in long-running threads or background workers.
+    """
+    if hasattr(_thread_local, 'connection') and _thread_local.connection is not None:
+        try:
+            _thread_local.connection.close()
+            log_info("Closed database connection for thread")
+        except Exception as e:
+            log_warning(f"Error closing database connection: {e}")
+        finally:
+            _thread_local.connection = None
+
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database operations with automatic commit/rollback.
+
+    Usage:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ...")
+            # conn.commit() is called automatically on success
+            # conn.rollback() is called automatically on exception
+    """
+    conn = _get_connection()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
 def init_db() -> None:
     """Initialize the database and create tables if not exists."""
     from secure_password_manager.utils.migrations import ensure_latest_schema
 
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-    # Main passwords table with additional fields
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS passwords (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            website TEXT NOT NULL,
-            username TEXT NOT NULL,
-            password BLOB NOT NULL,
-            category TEXT DEFAULT 'General',
-            notes TEXT DEFAULT '',
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            expiry_date INTEGER DEFAULT NULL,
-            favorite BOOLEAN DEFAULT 0
-        )
-    """
-    )
+            # Main passwords table with additional fields
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS passwords (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    website TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    password BLOB NOT NULL,
+                    category TEXT DEFAULT 'General',
+                    notes TEXT DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    expiry_date INTEGER DEFAULT NULL,
+                    favorite BOOLEAN DEFAULT 0
+                )
+            """
+            )
 
-    # Categories table
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            color TEXT DEFAULT 'blue'
-        )
-    """
-    )
+            # Categories table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    color TEXT DEFAULT 'blue'
+                )
+            """
+            )
 
-    # Insert default categories if they don't exist
-    default_categories = [
-        ("General", "blue"),
-        ("Work", "red"),
-        ("Personal", "green"),
-        ("Finance", "purple"),
-        ("Social", "orange"),
-    ]
+            # Insert default categories if they don't exist
+            default_categories = [
+                ("General", "blue"),
+                ("Work", "red"),
+                ("Personal", "green"),
+                ("Finance", "purple"),
+                ("Social", "orange"),
+            ]
 
-    for category, color in default_categories:
-        cursor.execute(
-            "INSERT OR IGNORE INTO categories (name, color) VALUES (?, ?)",
-            (category, color),
-        )
+            for category, color in default_categories:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO categories (name, color) VALUES (?, ?)",
+                    (category, color),
+                )
 
-    conn.commit()
-    conn.close()
-
-    # Run any pending migrations
-    ensure_latest_schema()
+        # Run any pending migrations (uses its own connection)
+        ensure_latest_schema()
+    except Exception as e:
+        log_warning(f"Error initializing database: {e}")
+        raise
 
 
 def add_password(
@@ -83,27 +170,25 @@ def add_password(
     current_time = int(time.time())
     expiry_date = current_time + (expiry_days * 86400) if expiry_days else None
 
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO passwords
-        (website, username, password, category, notes, created_at, updated_at, expiry_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        (
-            website,
-            username,
-            encrypted_password,
-            category,
-            notes,
-            current_time,
-            current_time,
-            expiry_date,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO passwords
+            (website, username, password, category, notes, created_at, updated_at, expiry_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                website,
+                username,
+                encrypted_password,
+                category,
+                notes,
+                current_time,
+                current_time,
+                expiry_date,
+            ),
+        )
 
 
 def get_passwords(
@@ -119,46 +204,42 @@ def get_passwords(
         search_term: Search in website and username
         show_expired: Whether to include expired passwords
     """
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    query = "SELECT * FROM passwords"
-    params = []
-    conditions = []
+        query = "SELECT * FROM passwords"
+        params = []
+        conditions = []
 
-    # Apply filters
-    if category:
-        conditions.append("category = ?")
-        params.append(category)
+        # Apply filters
+        if category:
+            conditions.append("category = ?")
+            params.append(category)
 
-    if search_term:
-        conditions.append("(website LIKE ? OR username LIKE ?)")
-        params.extend([f"%{search_term}%", f"%{search_term}%"])
+        if search_term:
+            conditions.append("(website LIKE ? OR username LIKE ?)")
+            params.extend([f"%{search_term}%", f"%{search_term}%"])
 
-    if not show_expired:
-        conditions.append("(expiry_date IS NULL OR expiry_date > ?)")
-        params.append(int(time.time()))
+        if not show_expired:
+            conditions.append("(expiry_date IS NULL OR expiry_date > ?)")
+            params.append(int(time.time()))
 
-    # Construct WHERE clause if we have conditions
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
+        # Construct WHERE clause if we have conditions
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
 
-    # Order by favorite first, then by website
-    query += " ORDER BY favorite DESC, website ASC"
+        # Order by favorite first, then by website
+        query += " ORDER BY favorite DESC, website ASC"
 
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+        cursor.execute(query, params)
+        return cursor.fetchall()
 
 
 def delete_password(entry_id: int) -> None:
     """Delete a password entry by ID."""
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM passwords WHERE id = ?", (entry_id,))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM passwords WHERE id = ?", (entry_id,))
 
 
 def update_password(
@@ -173,115 +254,115 @@ def update_password(
     rotation_reason: str = "manual",
 ) -> None:
     """Update a password entry with new information."""
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    # Get current values
-    cursor.execute("SELECT * FROM passwords WHERE id = ?", (entry_id,))
-    current = cursor.fetchone()
+        # Get current values
+        cursor.execute("SELECT * FROM passwords WHERE id = ?", (entry_id,))
+        current = cursor.fetchone()
 
-    if not current:
-        conn.close()
-        raise ValueError(f"No password entry with ID {entry_id}")
+        if not current:
+            conn.rollback()
+            raise ValueError(f"Password entry {entry_id} not found")
 
-    # Map column names to indices
-    columns = [
-        "id",
-        "website",
-        "username",
-        "password",
-        "category",
-        "notes",
-        "created_at",
-        "updated_at",
-        "expiry_date",
-        "favorite",
-    ]
-    col_idx = {col: i for i, col in enumerate(columns)}
+        # Map column names to indices
+        columns = [
+            "id",
+            "website",
+            "username",
+            "password",
+            "category",
+            "notes",
+            "created_at",
+            "updated_at",
+            "expiry_date",
+            "favorite",
+        ]
+        col_idx = {col: i for i, col in enumerate(columns)}
 
-    # If password is being changed, save old password to history
-    if (
-        encrypted_password is not None
-        and encrypted_password != current[col_idx["password"]]
-    ):
-        old_password = current[col_idx["password"]]
-        add_password_history(entry_id, old_password, rotation_reason)
+        # If password is being changed, save old password to history
+        if (
+            encrypted_password is not None
+            and encrypted_password != current[col_idx["password"]]
+        ):
+            # Check if password history is enabled
+            history_enabled = config.get_setting("password_history.enabled", True)
 
-    # Prepare update values
-    current_time = int(time.time())
-    updates: Dict[str, Any] = {"updated_at": current_time}
+            if history_enabled:
+                add_password_history(
+                    password_id=entry_id,
+                    old_password=current[col_idx["password"]],
+                    rotation_reason=rotation_reason,
+                    changed_by="user",
+                )
 
-    if website is not None:
-        updates["website"] = website
+        # Prepare update values
+        current_time = int(time.time())
+        updates: Dict[str, Any] = {"updated_at": current_time}
 
-    if username is not None:
-        updates["username"] = username
+        if website is not None:
+            updates["website"] = website
 
-    if encrypted_password is not None:
-        updates["password"] = encrypted_password
+        if username is not None:
+            updates["username"] = username
 
-    if category is not None:
-        updates["category"] = category
+        if encrypted_password is not None:
+            updates["password"] = encrypted_password
 
-    if notes is not None:
-        updates["notes"] = notes
+        if category is not None:
+            updates["category"] = category
 
-    if expiry_days is not None:
-        expiry_date = current_time + (expiry_days * 86400) if expiry_days > 0 else None
-        updates["expiry_date"] = expiry_date
+        if notes is not None:
+            updates["notes"] = notes
 
-    if favorite is not None:
-        updates["favorite"] = 1 if favorite else 0
+        if expiry_days is not None:
+            updates["expiry_date"] = current_time + (expiry_days * 86400)
 
-    # Build update query
-    set_clause = ", ".join(f"{key} = ?" for key in updates.keys())
-    query = f"UPDATE passwords SET {set_clause} WHERE id = ?"
+        if favorite is not None:
+            updates["favorite"] = int(favorite)
 
-    # Execute update
-    params = list(updates.values()) + [entry_id]
-    cursor.execute(query, params)
-    conn.commit()
-    conn.close()
+        # Build update query
+        set_clause = ", ".join(f"{key} = ?" for key in updates.keys())
+        query = f"UPDATE passwords SET {set_clause} WHERE id = ?"
+
+        # Execute update
+        params = list(updates.values()) + [entry_id]
+        cursor.execute(query, params)
 
 
 def get_categories() -> List[Tuple[str, str]]:
     """Get list of all categories with their colors."""
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, color FROM categories")
-    categories = cursor.fetchall()
-    conn.close()
-    return categories
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, color FROM categories")
+        return cursor.fetchall()
 
 
 def add_category(name: str, color: str = "blue") -> None:
     """Add a new category."""
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO categories (name, color) VALUES (?, ?)", (name, color))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO categories (name, color) VALUES (?, ?)", (name, color))
 
 
 def get_expiring_passwords(days: int = 30) -> List[Tuple]:
-    """Get passwords expiring within specified days."""
-    expiry_threshold = int(time.time()) + (days * 86400)
+    """Get passwords expiring within the specified number of days."""
+    current_time = int(time.time())
+    expiry_threshold = current_time + (days * 86400)
 
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT * FROM passwords
-        WHERE expiry_date IS NOT NULL
-        AND expiry_date < ?
-        AND expiry_date > ?
-    """,
-        (expiry_threshold, int(time.time())),
-    )
-
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM passwords
+            WHERE expiry_date IS NOT NULL
+            AND expiry_date > ?
+            AND expiry_date <= ?
+            ORDER BY expiry_date ASC
+        """,
+            (current_time, expiry_threshold),
+        )
+        return cursor.fetchall()
 
 
 def add_password_history(
@@ -290,86 +371,56 @@ def add_password_history(
     rotation_reason: str = "manual",
     changed_by: str = "user",
 ) -> None:
-    """
-    Add a password change to history.
-
-    Args:
-        password_id: The ID of the password entry.
-        old_password: The old encrypted password.
-        rotation_reason: Reason for rotation (manual, expiry, breach, strength).
-        changed_by: Who changed it (user, system, auto-rotate).
-    """
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-
+    """Record a password change in history."""
     current_time = int(time.time())
 
-    cursor.execute(
-        """
-        INSERT INTO password_history
-        (password_id, old_password, changed_at, rotation_reason, changed_by)
-        VALUES (?, ?, ?, ?, ?)
-    """,
-        (password_id, old_password, current_time, rotation_reason, changed_by),
-    )
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    conn.commit()
-
-    # Enforce retention limit (keep last 10 versions by default)
-    from secure_password_manager.utils import config
-
-    max_history = config.get_setting("password_history.max_versions", 10)
-
-    if max_history > 0:
+        # Add history entry
         cursor.execute(
             """
-            DELETE FROM password_history
-            WHERE password_id = ?
-            AND id NOT IN (
-                SELECT id FROM password_history
-                WHERE password_id = ?
-                ORDER BY changed_at DESC
-                LIMIT ?
-            )
+            INSERT INTO password_history
+            (password_id, old_password, changed_at, rotation_reason, changed_by)
+            VALUES (?, ?, ?, ?, ?)
         """,
-            (password_id, password_id, max_history),
+            (password_id, old_password, current_time, rotation_reason, changed_by),
         )
-        conn.commit()
 
-    conn.close()
-    log_info(
-        f"Password history recorded for entry {password_id}, reason: {rotation_reason}"
-    )
+        # Enforce retention limit
+        max_versions = config.get_setting("password_history.max_versions", 10)
+
+        if max_versions > 0:
+            cursor.execute(
+                """
+                DELETE FROM password_history
+                WHERE password_id = ?
+                AND id NOT IN (
+                    SELECT id FROM password_history
+                    WHERE password_id = ?
+                    ORDER BY changed_at DESC
+                    LIMIT ?
+                )
+            """,
+                (password_id, password_id, max_versions),
+            )
 
 
 def get_password_history(password_id: int, limit: int = 10) -> List[Tuple]:
-    """
-    Get password change history for an entry.
-
-    Args:
-        password_id: The ID of the password entry.
-        limit: Maximum number of history entries to return.
-
-    Returns:
-        List of tuples: (id, password_id, old_password, changed_at, rotation_reason, changed_by)
-    """
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT id, password_id, old_password, changed_at, rotation_reason, changed_by
-        FROM password_history
-        WHERE password_id = ?
-        ORDER BY changed_at DESC
-        LIMIT ?
-    """,
-        (password_id, limit),
-    )
-
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    """Get password change history for an entry."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, password_id, old_password, changed_at, rotation_reason, changed_by
+            FROM password_history
+            WHERE password_id = ?
+            ORDER BY changed_at DESC
+            LIMIT ?
+        """,
+            (password_id, limit),
+        )
+        return cursor.fetchall()
 
 
 def get_all_password_history(limit: int = 50) -> List[Tuple]:
@@ -382,37 +433,31 @@ def get_all_password_history(limit: int = 50) -> List[Tuple]:
     Returns:
         List of tuples with password details and history.
     """
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            ph.id,
-            ph.password_id,
-            p.website,
-            p.username,
-            ph.changed_at,
-            ph.rotation_reason,
-            ph.changed_by
-        FROM password_history ph
-        JOIN passwords p ON ph.password_id = p.id
-        ORDER BY ph.changed_at DESC
-        LIMIT ?
-    """,
-        (limit,),
-    )
-
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                ph.id,
+                ph.password_id,
+                p.website,
+                p.username,
+                ph.changed_at,
+                ph.rotation_reason,
+                ph.changed_by
+            FROM password_history ph
+            JOIN passwords p ON ph.password_id = p.id
+            ORDER BY ph.changed_at DESC
+            LIMIT ?
+        """,
+            (limit,),
+        )
+        return cursor.fetchall()
 
 
 def delete_password_history(password_id: int) -> None:
     """Delete all history for a password entry."""
-    conn = sqlite3.connect(_get_db_file())
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM password_history WHERE password_id = ?", (password_id,))
-    conn.commit()
-    conn.close()
-    log_info(f"Password history deleted for entry {password_id}")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM password_history WHERE password_id = ?", (password_id,))
+        log_info(f"Password history deleted for entry {password_id}")

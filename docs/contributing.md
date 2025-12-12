@@ -71,10 +71,42 @@ pip install secure-password-manager
 
 ## Testing Requirements
 
+**Critical**: All tests must use proper isolation fixtures to prevent production data modification.
+
+### Test Isolation
+
+**Always use the `isolated_environment` fixture** for new tests:
+
+```python
+def test_my_feature(isolated_environment):
+    # Guaranteed fresh state, no production access
+    generate_key()  # ✅ Isolated to /tmp/
+    init_db()       # ✅ Isolated to /tmp/
+    # All operations safe
+```
+
+**Available fixtures** (from `tests/conftest.py`):
+
+- `isolated_environment` - **Recommended**: Complete isolation (combines all fixtures below)
+- `test_env` - Base fixture with path monkeypatching
+- `clean_crypto_files` - Removes all crypto files (including `.bak` backups)
+- `clean_database` - Fresh database with schema
+
+**Never:**
+
+- Use `test_env` alone without `clean_crypto_files` and `clean_database`
+- Import path functions at module level (breaks monkeypatching)
+- Write files directly to `.data/` in tests
+
+See `docs/testing-quality.md` for complete isolation documentation.
+
+### Running Tests
+
 - `pytest --cov=secure_password_manager` must pass locally.
 - Add regression tests for every bug fix.
 - GUI-related changes should accompany pytest-qt smoke tests or manual verification steps listed in the PR description.
 - Document any new fixtures or helpers in `docs/testing-quality.md`.
+- Run `pytest tests/test_isolation.py -v` to verify isolation is working.
 
 ## Documentation Expectations
 

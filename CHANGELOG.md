@@ -2,6 +2,31 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [Unreleased]
+
+### Added
+
+- **Test Isolation**: Comprehensive test isolation system to prevent tests from modifying production data.
+  - New `isolated_environment` fixture combining all isolation mechanisms.
+  - New `tests/test_isolation.py` with 7 verification tests.
+  - Session-level safeguard to detect production directory access attempts.
+  - Enhanced `clean_crypto_files` fixture with wildcard cleanup (`secret.key*`) to catch all backup files.
+  - Complete path monkeypatching for all `get_*_path()` functions.
+
+### Changed
+
+- **Test Fixtures**: Enhanced `conftest.py` with complete isolation architecture.
+  - All path functions now monkeypatched to use temp directories (`/tmp/pytest-xxx/`).
+  - Wildcard patterns (`secret.key*`) catch all generated files including `.bak` backups.
+  - Module state (crypto context, logger) reset between tests.
+  - Added comprehensive documentation in `docs/testing-quality.md`.
+
+### Fixed
+
+- **Critical**: Tests can no longer create backup files (`.bak`) in production `.data/` directory.
+  - Previously, `protect_key_with_master_password()` created timestamped `.bak` files in production during tests.
+  - Now all operations are isolated to temporary directories.
+
 ## [1.10.4] - 2025-12-10
 
 ### Fixed

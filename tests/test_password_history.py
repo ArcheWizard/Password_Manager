@@ -22,33 +22,19 @@ from secure_password_manager.utils.migrations import get_schema_version, run_mig
 
 
 @pytest.fixture
-def test_db(tmp_path, monkeypatch):
+def test_db(test_env, clean_database, clean_crypto_files):
     """Set up a temporary database for testing."""
-    # Create temporary directories
-    data_dir = tmp_path / "data"
-    config_dir = tmp_path / "config"
-    cache_dir = tmp_path / "cache"
+    from secure_password_manager.utils.crypto import generate_key
 
-    for directory in [data_dir, config_dir, cache_dir]:
-        directory.mkdir(parents=True, exist_ok=True)
+    # Generate encryption key
+    generate_key()
 
-    # Monkey patch paths
-    monkeypatch.setattr(
-        "secure_password_manager.utils.paths.get_data_dir", lambda: data_dir
-    )
-    monkeypatch.setattr(
-        "secure_password_manager.utils.paths.get_config_dir", lambda: config_dir
-    )
-    monkeypatch.setattr(
-        "secure_password_manager.utils.paths.get_cache_dir", lambda: cache_dir
-    )
-
-    # Initialize database
+    # Initialize database (already done by clean_database but ensures migrations run)
     init_db()
 
-    yield tmp_path
+    yield test_env["data_dir"]
 
-    # Cleanup is automatic with tmp_path
+    # Cleanup handled by conftest fixtures
 
 
 def test_migration_creates_password_history_table(test_db):

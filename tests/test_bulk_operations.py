@@ -25,6 +25,9 @@ from secure_password_manager.utils.database import add_password, get_passwords, 
 @pytest.fixture
 def setup_test_entries(clean_crypto_files, clean_database):
     """Create test password entries."""
+    from secure_password_manager.utils.crypto import generate_key
+
+    generate_key()
     init_db()
 
     entries = [
