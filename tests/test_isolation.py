@@ -23,8 +23,15 @@ def test_isolation_uses_temp_directory(test_env):
     # Use module.function() syntax to get monkeypatched version
     data_dir = paths.get_data_dir()
 
-    # Should be in temp directory
-    assert "/tmp" in str(data_dir) or "temp" in str(data_dir).lower()
+    # Should be in temp directory (cross-platform check)
+    data_dir_str = str(data_dir).lower()
+    is_temp = (
+        "/tmp" in data_dir_str or
+        "pytest" in data_dir_str or
+        "/var/folders" in data_dir_str or  # macOS
+        "\\temp\\" in data_dir_str  # Windows
+    )
+    assert is_temp, f"Should use temp directory, got: {data_dir}"
 
     # Should NOT be production .data directory
     production_data = Path(__file__).parent.parent / ".data"
@@ -89,7 +96,15 @@ def test_database_isolation(isolated_environment):
     db_path = paths.get_database_path()
 
     # Database should be in temp directory
-    assert "/tmp" in str(db_path) or "temp" in str(db_path).lower()
+    # Check for pytest temp directory markers (cross-platform)
+    db_path_str = str(db_path).lower()
+    is_temp = (
+        "/tmp" in db_path_str or
+        "pytest" in db_path_str or  # pytest creates temp dirs
+        "/var/folders" in db_path_str or  # macOS temp dirs
+        "\\temp\\" in db_path_str  # Windows temp dirs
+    )
+    assert is_temp, f"Database should be in temp directory, got: {db_path}"
 
     # Should NOT be in production
     production_db = Path(__file__).parent.parent / ".data" / "passwords.db"
