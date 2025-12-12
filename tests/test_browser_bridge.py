@@ -212,3 +212,34 @@ def test_credentials_store_prevents_duplicates(
     assert len(passwords) == 2
 
 
+def test_generate_pairing_code(isolated_environment):
+    """Test pairing code generation."""
+    service = BrowserBridgeService()
+
+    code = service.generate_pairing_code()
+    assert isinstance(code, dict)
+    assert "code" in code
+    assert len(code["code"]) == 6
+    assert code["code"].isdigit()
+
+
+def test_token_store_list_tokens(tmp_path):
+    """Test listing all tokens."""
+    store_path = Path(tmp_path) / "tokens.json"
+    store = TokenStore(store_path, ttl_hours=1)
+
+    # Issue multiple tokens
+    store.issue_token("fp1", "chrome")
+    store.issue_token("fp2", "firefox")
+    store.issue_token("fp3", "edge")
+
+    tokens = store.list_tokens()
+    assert len(tokens) == 3
+
+
+def test_browser_bridge_get_pairing_info(isolated_environment):
+    """Test getting pairing information."""
+    service = BrowserBridgeService()
+
+    info = service.generate_pairing_code()
+    assert "code" in info and "expires_at" in info
