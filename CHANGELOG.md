@@ -2,6 +2,22 @@
 
 All notable changes will be documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and uses semantic versioning when practical.
 
+## [1.11.0] - 2026-10-06
+
+### Changed
+
+- Improved GUI responsiveness for filtering, searching, and category switching on larger vaults.
+- Deferred browser bridge startup until after the main window is shown to reduce perceived launch time.
+- Reused the project virtual environment in packaging scripts to avoid unnecessary setup churn.
+
+### Fixed
+
+- Browser extension help now opens the project documentation instead of the stale wiki link.
+- Browser extension startup now prefers the local HTTP bridge first to avoid a failed localhost probe.
+- Browser bridge start/stop handling now recognizes an already-running compatible local instance.
+
+
+
 ## [Unreleased]
 
 ### Added

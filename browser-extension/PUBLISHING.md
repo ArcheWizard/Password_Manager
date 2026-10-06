@@ -4,7 +4,7 @@ This guide covers the steps to publish the Secure Password Manager browser exten
 
 ## Version
 
-Current version: **1.10.4**
+Current version: **1.11.0**
 
 ## Prerequisites
 
@@ -52,7 +52,7 @@ This creates `build/chrome/` directory with:
 
 ```bash
 cd build/chrome
-zip -r secure-password-manager-chrome-1.10.3.zip .
+zip -r secure-password-manager-chrome-1.11.0.zip .
 ```
 
 ### Firefox Extension
@@ -74,7 +74,7 @@ This creates `build/firefox/` directory with:
 
 ```bash
 cd build/firefox
-zip -r secure-password-manager-firefox-1.10.3.zip .
+zip -r secure-password-manager-firefox-1.11.0.zip .
 ```
 
 **Or create signed XPI with web-ext:**

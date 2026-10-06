@@ -119,7 +119,7 @@ function setupEventListeners() {
   // Footer links
   document.getElementById('help-link').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({ url: 'https://github.com/ArcheWizard/Password_Manager/wiki' });
+    chrome.tabs.create({ url: 'https://github.com/ArcheWizard/Password_Manager/blob/main/browser-extension/README.md' });
   });
 
   document.getElementById('settings-link').addEventListener('click', (e) => {
@@ -256,7 +256,7 @@ function showMessage(message) {
 // Show about dialog
 function showAboutDialog() {
   alert(`Secure Password Manager Extension
-Version: 0.1.0
+Version: 1.11.0
 
 Browser extension for secure password autofill and management.
 

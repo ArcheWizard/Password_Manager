@@ -96,7 +96,7 @@ include = '\.pyi?$'
 
 [tool.ruff]
 line-length = 88
-target-version = "py38"
+target-version = "1.11.0"
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 

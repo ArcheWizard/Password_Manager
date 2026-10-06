@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Secure Password Manager",
-  "version": "1.10.4",
+  "version": "1.11.0",
   "description": "Browser extension for Secure Password Manager - auto-fill credentials securely from your local vault",
   "permissions": [
     "storage",
@@ -10,13 +10,19 @@
     "https://127.0.0.1:43110/*"
   ],
   "background": {
-    "scripts": ["background-firefox.js"],
+    "scripts": [
+      "background-firefox.js"
+    ],
     "persistent": false
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
@@ -36,7 +42,9 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "web_accessible_resources": ["autofill-modal.html"],
+  "web_accessible_resources": [
+    "autofill-modal.html"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "secure-password-manager@archewizard.dev",

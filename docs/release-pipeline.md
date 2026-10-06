@@ -37,17 +37,17 @@ Main CI/CD pipeline that runs on:
 1. **Update Version**
 
    ```bash
-   # Bump patch version (e.g., 1.10.3 -> 1.10.4)
+   # Bump patch version (e.g., 1.10.4 -> 1.11.0)
    python scripts/bump_version.py patch
 
-   # Bump minor version (e.g., 1.10.3 -> 1.11.0)
+   # Bump minor version (e.g., 1.10.4 -> 1.12.0)
    python scripts/bump_version.py minor
 
-   # Bump major version (e.g., 1.10.3 -> 2.0.0)
+   # Bump major version (e.g., 1.10.4 -> 2.0.0)
    python scripts/bump_version.py major
 
    # Or set explicit version
-   python scripts/bump_version.py patch --new-version 1.10.4
+   python scripts/bump_version.py patch --new-version 1.11.0
    ```
 
    This updates:
@@ -63,25 +63,27 @@ Main CI/CD pipeline that runs on:
    Fill in the release notes in the newly created section:
 
    ```markdown
-   ## [1.10.4] - 2025-12-09
+   ## [1.11.0] - 2026-10-06
 
    ### Added
-   - Domain socket transport for browser bridge
-   - Bulk operations for multi-select entries
-   - pytest-qt smoke test suite
+   - Faster GUI filtering and category switching for larger vaults
+   - Deferred browser bridge startup to improve perceived launch speed
+   - Browser extension docs and help-link cleanup
 
    ### Changed
-   - Improved security audit performance with parallel processing
+   - Packaging scripts now reuse the project virtual environment
+   - Browser bridge startup now recognizes an already-running compatible instance
 
    ### Fixed
-   - Fixed certificate fingerprint format in TLS module
+   - Browser extension now prefers HTTP for localhost bridge probing
+   - Release metadata is synchronized across the package and browser manifests
    ```
 
 3. **Commit and Push**
 
    ```bash
    git add -A
-   git commit -m "Bump version to 1.10.4"
+   git commit -m "Bump version to 1.11.0"
    git push origin main
    ```
 
@@ -89,8 +91,8 @@ Main CI/CD pipeline that runs on:
 
    ```bash
    # Create and push tag
-   git tag -a v1.10.4 -m "Release v1.10.4"
-   git push origin v1.10.4
+   git tag -a v1.11.0 -m "Release v1.11.0"
+   git push origin v1.11.0
    ```
 
    Or use the version bump script with `--tag --push`:
@@ -102,8 +104,8 @@ Main CI/CD pipeline that runs on:
 5. **Create GitHub Release via Web UI**
 
    - Go to <https://github.com/YOUR_USERNAME/Password_Manager/releases/new>
-   - Select tag: `v1.10.4`
-   - Title: `v1.10.4`
+   - Select tag: `v1.11.0`
+   - Title: `v1.11.0`
    - Description: Copy relevant section from CHANGELOG.md
    - Check "Set as latest release"
    - Click "Publish release"
@@ -152,7 +154,7 @@ For code coverage reporting:
 
 Follow semantic versioning (MAJOR.MINOR.PATCH):
 
-- **PATCH** (e.g., 1.10.3 → 1.10.4): Bug fixes, no new features
+- **PATCH** (e.g., 1.10.4 → 1.11.0): Bug fixes, no new features
 - **MINOR** (e.g., 1.10.3 → 1.11.0): New features, backward compatible
 - **MAJOR** (e.g., 1.10.3 → 2.0.0): Breaking changes
 
@@ -223,8 +225,8 @@ If a release has issues:
 3. **Delete Git Tag**
 
    ```bash
-   git tag -d v1.10.4
-   git push origin :refs/tags/v1.10.4
+   git tag -d v1.11.0
+   git push origin :refs/tags/v1.11.0
    ```
 
 4. **Revert Version**
