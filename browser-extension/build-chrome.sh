@@ -45,7 +45,7 @@ else
     if command -v convert &> /dev/null; then
         echo "Using ImageMagick to generate high-quality icons..."
 
-        # Create icons with lock symbol
+        # Create monochrome icons with a lock symbol
         for size in 16 32 48 128; do
             # Calculate proportions
             padding=$((size / 8))
@@ -60,7 +60,7 @@ else
 
             # Create icon with rounded rectangle background and lock
             convert -size ${size}x${size} xc:none \
-                -fill "#4CAF50" \
+                -fill "#111111" \
                 -draw "roundrectangle 0,0 $size,$size $radius,$radius" \
                 -fill white \
                 -draw "roundrectangle $lock_body_x,$lock_body_y $((lock_body_x + lock_body_width)),$((lock_body_y + lock_body_height)) 2,2" \
@@ -69,15 +69,15 @@ else
                 -strokewidth 2 \
                 -draw "arc $((shackle_center_x - shackle_radius)),$((shackle_center_y - shackle_radius/2)) $((shackle_center_x + shackle_radius)),$((shackle_center_y + shackle_radius)) 180,0" \
                 "$BUILD_DIR/icons/icon-${size}.png" 2>/dev/null || \
-            # Fallback: simple icon with text
+            # Fallback: simple icon with lock text
             convert -size ${size}x${size} xc:none \
-                -fill "#4CAF50" \
+                -fill "#111111" \
                 -draw "roundrectangle 0,0 $size,$size $radius,$radius" \
                 -fill white \
                 -font DejaVu-Sans-Bold \
                 -pointsize $((size / 3)) \
                 -gravity center \
-                -annotate 0 "PM" \
+                -annotate 0 "LK" \
                 "$BUILD_DIR/icons/icon-${size}.png"
         done
 
@@ -131,8 +131,8 @@ def create_png(width, height, color):
 
     return png
 
-# Green color for Password Manager
-color = (76, 175, 80)  # #4CAF50
+# Black color for Password Manager
+color = (17, 17, 17)  # #111111
 png_data = create_png($size, $size, color)
 
 with open('$BUILD_DIR/icons/icon-${size}.png', 'wb') as f:

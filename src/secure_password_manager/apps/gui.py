@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QStatusBar,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -62,6 +63,7 @@ from secure_password_manager.utils.database import (
     add_password,
     delete_password,
     get_categories,
+    get_password_by_id,
     get_password_history,
     get_passwords,
     init_db,
@@ -332,6 +334,10 @@ class PasswordManagerApp(QMainWindow):
         # Timer tracking for password reveal
         self._active_timers = []
         self._lock = threading.Lock()
+        self._filter_refresh_timer = QTimer(self)
+        self._filter_refresh_timer.setSingleShot(True)
+        self._filter_refresh_timer.setInterval(150)
+        self._filter_refresh_timer.timeout.connect(self.apply_filters)
 
         # Set master password context and verify key access
         if is_key_protected():
@@ -370,14 +376,31 @@ class PasswordManagerApp(QMainWindow):
         approval_manager = get_approval_manager()
         approval_manager.set_prompt_handler(gui_approval_prompt)
 
-        # Now initialize browser bridge (may start the service)
-        self.initialize_browser_bridge()
-
         # Create UI
         self.init_ui()
 
+        # Start the browser bridge after the window is built so startup feels snappier.
+        QTimer.singleShot(0, self.initialize_browser_bridge)
+
         # Connect tab change handler for lazy loading
         self.central_widget.currentChanged.connect(self._on_tab_changed)
+
+    def _require_status_bar(self) -> QStatusBar:
+        status_bar = self.statusBar()
+        if status_bar is None:
+            raise RuntimeError("Status bar is not initialized")
+        return status_bar
+
+    def _show_status_message(self, message: str, timeout: int = 0) -> None:
+        self._require_status_bar().showMessage(message, timeout)
+
+    def _require_table_item(
+        self, table: QTableWidget, row: int, column: int
+    ) -> QTableWidgetItem:
+        item = table.item(row, column)
+        if item is None:
+            raise RuntimeError(f"Missing table item at row {row}, column {column}")
+        return item
 
     def initialize_browser_bridge(self) -> None:
         if config.get_setting("browser_bridge.enabled", False):
@@ -625,11 +648,11 @@ class PasswordManagerApp(QMainWindow):
         self.create_toolbar()
 
         # Status bar
-        self.statusBar().showMessage("Ready")
+        self._show_status_message("Ready")
 
-        # Load passwords immediately since Passwords tab is displayed by default
+        # Load passwords after the UI is shown so the window appears sooner.
         self._passwords_loaded = True
-        self.refresh_passwords()
+        QTimer.singleShot(0, self.refresh_passwords)
 
     def _add_tab(self, title: str, scrollable: bool = False) -> QWidget:
         """Create a tab widget, optionally wrapping it in a scroll area."""
@@ -649,34 +672,61 @@ class PasswordManagerApp(QMainWindow):
         """Create a toolbar with common actions"""
         toolbar = QToolBar("Main Toolbar")
         toolbar.setIconSize(QSize(20, 20))
-        self.addToolBar(toolbar)
+        self.addToolBar(QtCoreQt.ToolBarArea.LeftToolBarArea, toolbar)
+        toolbar.setMovable(True)
+        toolbar.setFloatable(True)
+
+        self._toolbar_actions = {}
 
         # Add Password Action
-        add_action = QAction("Add Password", self)
-        add_action.triggered.connect(self.add_password)
-        toolbar.addAction(add_action)
+        self._toolbar_actions["add"] = QAction("Add Password", self)
+        self._toolbar_actions["add"].triggered.connect(self.add_password)
+        toolbar.addAction(self._toolbar_actions["add"])
+
+        # View Password Action
+        self._toolbar_actions["show"] = QAction("See Password", self)
+        self._toolbar_actions["show"].triggered.connect(self.show_password)
+        toolbar.addAction(self._toolbar_actions["show"])
 
         # Copy Password Action
-        copy_action = QAction("Copy Password", self)
-        copy_action.triggered.connect(self.copy_password)
-        toolbar.addAction(copy_action)
+        self._toolbar_actions["copy"] = QAction("Copy Password", self)
+        self._toolbar_actions["copy"].triggered.connect(self.copy_password)
+        toolbar.addAction(self._toolbar_actions["copy"])
+
+        # Edit Password Action
+        self._toolbar_actions["edit"] = QAction("Edit Password", self)
+        self._toolbar_actions["edit"].triggered.connect(self.edit_password)
+        toolbar.addAction(self._toolbar_actions["edit"])
+
+        # Delete Password Action
+        self._toolbar_actions["delete"] = QAction("Delete Password", self)
+        self._toolbar_actions["delete"].triggered.connect(self.delete_password)
+        toolbar.addAction(self._toolbar_actions["delete"])
 
         # Refresh Action
-        refresh_action = QAction("Refresh", self)
-        refresh_action.triggered.connect(self.refresh_passwords)
-        toolbar.addAction(refresh_action)
+        self._toolbar_actions["refresh"] = QAction("Refresh", self)
+        self._toolbar_actions["refresh"].triggered.connect(self.refresh_passwords)
+        toolbar.addAction(self._toolbar_actions["refresh"])
 
         toolbar.addSeparator()
 
         # Export Action
-        export_action = QAction("Export", self)
-        export_action.triggered.connect(self.export_passwords)
-        toolbar.addAction(export_action)
+        self._toolbar_actions["export"] = QAction("Export", self)
+        self._toolbar_actions["export"].triggered.connect(self.export_passwords)
+        toolbar.addAction(self._toolbar_actions["export"])
 
         # Import Action
-        import_action = QAction("Import", self)
-        import_action.triggered.connect(self.import_passwords)
-        toolbar.addAction(import_action)
+        self._toolbar_actions["import"] = QAction("Import", self)
+        self._toolbar_actions["import"].triggered.connect(self.import_passwords)
+        toolbar.addAction(self._toolbar_actions["import"])
+
+        self._password_actions = [
+            self._toolbar_actions["show"],
+            self._toolbar_actions["copy"],
+            self._toolbar_actions["edit"],
+            self._toolbar_actions["delete"],
+        ]
+        self.update_password_action_visibility()
 
     def setup_passwords_tab(self):
         """Set up the passwords tab UI"""
@@ -744,46 +794,28 @@ class PasswordManagerApp(QMainWindow):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)  # Select entire rows
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # Make it read-only
-        self.table.verticalHeader().setVisible(False)  # Hide vertical header
-        self.table.horizontalHeader().setStretchLastSection(
-            True
-        )  # Stretch last section
-        self.table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.Stretch
-        )  # Stretch website column
-        self.table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.Stretch
-        )  # Stretch username column
+        table_vertical_header = self.table.verticalHeader()
+        if table_vertical_header is not None:
+            table_vertical_header.setVisible(False)  # Hide vertical header
+        table_horizontal_header = self.table.horizontalHeader()
+        if table_horizontal_header is not None:
+            table_horizontal_header.setStretchLastSection(
+                True
+            )  # Stretch last section
+            table_horizontal_header.setSectionResizeMode(
+                1, QHeaderView.Stretch
+            )  # Stretch website column
+            table_horizontal_header.setSectionResizeMode(
+                2, QHeaderView.Stretch
+            )  # Stretch username column
         self.table.setSortingEnabled(True)  # Enable sorting
 
         # Context menu for table
         self.table.setContextMenuPolicy(QtCoreQt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
+        self.table.itemSelectionChanged.connect(self.update_password_action_visibility)
 
         layout.addWidget(self.table)
-
-        # Buttons
-        btn_layout = QHBoxLayout()
-
-        add_btn = QPushButton("Add Password")
-        add_btn.clicked.connect(self.add_password)
-        btn_layout.addWidget(add_btn)
-
-        edit_btn = QPushButton("Edit Password")
-        edit_btn.clicked.connect(self.edit_password)
-        btn_layout.addWidget(edit_btn)
-
-        delete_btn = QPushButton("Delete Password")
-        delete_btn.clicked.connect(self.delete_password)
-        btn_layout.addWidget(delete_btn)
-
-        btn_layout.addStretch()
-
-        copy_btn = QPushButton("Copy Password")
-        copy_btn.clicked.connect(self.copy_password)
-        btn_layout.addWidget(copy_btn)
-
-        layout.addLayout(btn_layout)
 
     def setup_security_tab(self):
         """Set up the security audit tab UI"""
@@ -896,116 +928,137 @@ class PasswordManagerApp(QMainWindow):
         """Refresh the password table with current filters"""
         # Cancel any pending password reveal timers when refreshing table
         self._cancel_all_timers()
+        if hasattr(self, "_filter_refresh_timer"):
+            self._filter_refresh_timer.stop()
         self.apply_filters()
+        self.update_password_action_visibility()
+
+    def update_password_action_visibility(self) -> None:
+        """Show password-specific actions only when a row is selected."""
+        has_selection = bool(self.table.selectedItems()) if hasattr(self, "table") else False
+
+        for action in getattr(self, "_password_actions", []):
+            action.setVisible(has_selection)
+
+    def _schedule_filter_refresh(self) -> None:
+        """Coalesce rapid filter changes into a single table refresh."""
+        if hasattr(self, "_filter_refresh_timer"):
+            self._filter_refresh_timer.start()
 
     def apply_filters(self):
         """Apply category and search filters to password list."""
-        # Clear table
-        self.table.setRowCount(0)
+        sorting_enabled = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+        self.table.setUpdatesEnabled(False)
+        self.table.blockSignals(True)
 
-        # Get filter values
-        category = None
-        if self.category_combo.currentIndex() > 0:
-            category = self.category_combo.currentText()
+        try:
+            # Get filter values
+            category = None
+            if self.category_combo.currentIndex() > 0:
+                category = self.category_combo.currentText()
 
-        search_term = self.search_edit.text() if self.search_edit.text() else None
-        show_expired = self.show_expired.isChecked()
-        expiring_only = self.show_expiring_only.isChecked()
-        favorites_only_filter = self.favorites_only.isChecked()
+            search_term = self.search_edit.text() if self.search_edit.text() else None
+            show_expired = self.show_expired.isChecked()
+            expiring_only = self.show_expiring_only.isChecked()
+            favorites_only_filter = self.favorites_only.isChecked()
 
-        # Get passwords with filters
-        passwords = get_passwords(category, search_term, show_expired)
+            # Get passwords with filters
+            passwords = get_passwords(category, search_term, show_expired)
 
-        # Additional filtering for expiring soon
-        if expiring_only:
-            current_time = int(time.time())
-            thirty_days = 30 * 86400
-            passwords = [
-                p
-                for p in passwords
-                if p[8] and p[8] <= current_time + thirty_days and p[8] > current_time
-            ]
+            # Additional filtering for expiring soon
+            if expiring_only:
+                current_time = int(time.time())
+                thirty_days = 30 * 86400
+                passwords = [
+                    p
+                    for p in passwords
+                    if p[8] and p[8] <= current_time + thirty_days and p[8] > current_time
+                ]
 
-        # Filter favorites only
-        if favorites_only_filter:
-            passwords = [p for p in passwords if p[9]]  # p[9] is favorite column
+            # Filter favorites only
+            if favorites_only_filter:
+                passwords = [p for p in passwords if p[9]]  # p[9] is favorite column
 
-        # Fill table
-        self.table.setRowCount(len(passwords))
+            # Fill table
+            self.table.setRowCount(len(passwords))
 
-        for row, entry in enumerate(passwords):
-            (
-                entry_id,
-                website,
-                username,
-                encrypted,
-                category,
-                notes,
-                created,
-                updated,
-                expiry,
-                favorite,
-            ) = entry
-            decrypted = decrypt_password(encrypted)
+            for row, entry in enumerate(passwords):
+                (
+                    entry_id,
+                    website,
+                    username,
+                    _encrypted,
+                    category,
+                    _notes,
+                    created,
+                    _updated,
+                    expiry,
+                    favorite,
+                ) = entry
 
-            # Format dates
-            created_str = time.strftime("%Y-%m-%d", time.localtime(created))
+                # Format dates
+                created_str = time.strftime("%Y-%m-%d", time.localtime(created))
 
-            # Format expiry
-            days_left = None
-            if expiry:
-                days_left = int((expiry - time.time()) / 86400)
-                if days_left < 0:
-                    expiry_str = "EXPIRED"
+                # Format expiry
+                days_left = None
+                if expiry:
+                    days_left = int((expiry - time.time()) / 86400)
+                    if days_left < 0:
+                        expiry_str = "EXPIRED"
+                    else:
+                        expiry_str = f"{days_left} days"
                 else:
-                    expiry_str = f"{days_left} days"
-            else:
-                expiry_str = "Never"
+                    expiry_str = "Never"
 
-            # Set the items with appropriate colors - FIXED ID DISPLAY
-            id_item = QTableWidgetItem(str(entry_id))
-            id_item.setTextAlignment(
-                QtCoreQt.AlignmentFlag.AlignCenter
-            )  # Center the ID value
-            self.table.setItem(row, 0, id_item)
+                # Set the items with appropriate colors - FIXED ID DISPLAY
+                id_item = QTableWidgetItem(str(entry_id))
+                id_item.setTextAlignment(
+                    QtCoreQt.AlignmentFlag.AlignCenter
+                )  # Center the ID value
+                self.table.setItem(row, 0, id_item)
 
-            website_item = QTableWidgetItem(website)
-            if favorite:
-                website_item.setForeground(QColor("#ffd700"))  # Gold for favorites
-            self.table.setItem(row, 1, website_item)
+                website_item = QTableWidgetItem(website)
+                if favorite:
+                    website_item.setForeground(QColor("#ffd700"))  # Gold for favorites
+                self.table.setItem(row, 1, website_item)
 
-            username_item = QTableWidgetItem(username)
-            self.table.setItem(row, 2, username_item)
+                username_item = QTableWidgetItem(username)
+                self.table.setItem(row, 2, username_item)
 
-            password_item = QTableWidgetItem("••••••••")  # Mask password
-            password_item.setData(
-                QtCoreQt.ItemDataRole.UserRole, decrypted
-            )  # Store real password as data
-            password_item.setTextAlignment(
-                QtCoreQt.AlignmentFlag.AlignCenter
-            )  # Center the dots
-            self.table.setItem(row, 3, password_item)
+                password_item = QTableWidgetItem("••••••••")  # Mask password
+                password_item.setData(
+                    QtCoreQt.ItemDataRole.UserRole, entry_id
+                )  # Resolve password lazily when needed
+                password_item.setTextAlignment(
+                    QtCoreQt.AlignmentFlag.AlignCenter
+                )  # Center the dots
+                self.table.setItem(row, 3, password_item)
 
-            category_item = QTableWidgetItem(category)
-            self.table.setItem(row, 4, category_item)
+                category_item = QTableWidgetItem(category)
+                self.table.setItem(row, 4, category_item)
 
-            created_item = QTableWidgetItem(created_str)
-            created_item.setTextAlignment(
-                QtCoreQt.AlignmentFlag.AlignCenter
-            )  # Center the date
-            self.table.setItem(row, 5, created_item)
+                created_item = QTableWidgetItem(created_str)
+                created_item.setTextAlignment(
+                    QtCoreQt.AlignmentFlag.AlignCenter
+                )  # Center the date
+                self.table.setItem(row, 5, created_item)
 
-            expiry_item = QTableWidgetItem(expiry_str)
-            expiry_item.setTextAlignment(
-                QtCoreQt.AlignmentFlag.AlignCenter
-            )  # Center the expiry info
-            if expiry and days_left is not None and days_left < 0:
-                expiry_item.setForeground(QColor("red"))
-            elif expiry and days_left is not None and days_left < 7:
-                expiry_item.setForeground(QColor("orange"))
-            self.table.setItem(row, 6, expiry_item)
+                expiry_item = QTableWidgetItem(expiry_str)
+                expiry_item.setTextAlignment(
+                    QtCoreQt.AlignmentFlag.AlignCenter
+                )  # Center the expiry info
+                if expiry and days_left is not None and days_left < 0:
+                    expiry_item.setForeground(QColor("red"))
+                elif expiry and days_left is not None and days_left < 7:
+                    expiry_item.setForeground(QColor("orange"))
+                self.table.setItem(row, 6, expiry_item)
 
-        self.statusBar().showMessage(f"{len(passwords)} passwords found")
+            self._show_status_message(f"{len(passwords)} passwords found")
+        finally:
+            self.table.blockSignals(False)
+            self.table.setUpdatesEnabled(True)
+            self.table.setSortingEnabled(sorting_enabled)
 
     def show_context_menu(self, position):
         """Show context menu for table items"""
@@ -1051,13 +1104,17 @@ class PasswordManagerApp(QMainWindow):
 
         # Get password from the third column (index 3) of the selected row
         row = selected[0].row()
-        password_item = self.table.item(row, 3)
-        password = password_item.data(
-            QtCoreQt.ItemDataRole.UserRole
-        )  # Get the stored password
+        password_item = self._require_table_item(self.table, row, 3)
+        entry_id = password_item.data(QtCoreQt.ItemDataRole.UserRole)
+        entry = get_password_by_id(int(entry_id)) if entry_id is not None else None
+        if not entry:
+            QMessageBox.warning(self, "Error", "No password found for selection")
+            return
+
+        password = decrypt_password(entry[3])
 
         copy_to_clipboard(password)
-        self.statusBar().showMessage(
+        self._show_status_message(
             "Password copied to clipboard (auto-clear enabled)", 3000
         )
 
@@ -1072,8 +1129,14 @@ class PasswordManagerApp(QMainWindow):
             return
 
         row = selected[0].row()
-        password_item = self.table.item(row, 3)
-        password = password_item.data(QtCoreQt.ItemDataRole.UserRole)
+        password_item = self._require_table_item(self.table, row, 3)
+        entry_id = password_item.data(QtCoreQt.ItemDataRole.UserRole)
+        entry = get_password_by_id(int(entry_id)) if entry_id is not None else None
+        if not entry:
+            QMessageBox.warning(self, "Error", "No password found for selection")
+            return
+
+        password = decrypt_password(entry[3])
 
         password_item.setText(password)
 
@@ -1091,7 +1154,7 @@ class PasswordManagerApp(QMainWindow):
                 if table is not None and item is not None:
                     # Double-check item is still in the table at the same position
                     current_item = table.item(row, 3)
-                    if current_item is item:
+                    if current_item is not None and current_item is item:
                         item.setText("••••••••")
             except (RuntimeError, AttributeError):
                 # Item or table was deleted, ignore silently
@@ -1127,9 +1190,9 @@ class PasswordManagerApp(QMainWindow):
             return
 
         row = selected[0].row()
-        entry_id = int(self.table.item(row, 0).text())
-        website = self.table.item(row, 1).text()
-        username = self.table.item(row, 2).text()
+        entry_id = int(self._require_table_item(self.table, row, 0).text())
+        website = self._require_table_item(self.table, row, 1).text()
+        username = self._require_table_item(self.table, row, 2).text()
 
         # Get history
         history = get_password_history(entry_id)
@@ -1166,8 +1229,10 @@ class PasswordManagerApp(QMainWindow):
         history_table.setAlternatingRowColors(True)
         history_table.setSelectionBehavior(QTableWidget.SelectRows)
         history_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        history_table.horizontalHeader().setStretchLastSection(True)
-        history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        history_horizontal_header = history_table.horizontalHeader()
+        if history_horizontal_header is not None:
+            history_horizontal_header.setStretchLastSection(True)
+            history_horizontal_header.setSectionResizeMode(1, QHeaderView.Stretch)
 
         # Populate history
         for i, hist in enumerate(history):
@@ -1190,12 +1255,13 @@ class PasswordManagerApp(QMainWindow):
 
             # Color-code reason
             reason_item = history_table.item(i, 3)
-            if reason == "breach":
-                reason_item.setForeground(QColor("red"))
-            elif reason == "strength":
-                reason_item.setForeground(QColor("orange"))
-            elif reason == "expiry":
-                reason_item.setForeground(QColor("blue"))
+            if reason_item is not None:
+                if reason == "breach":
+                    reason_item.setForeground(QColor("red"))
+                elif reason == "strength":
+                    reason_item.setForeground(QColor("orange"))
+                elif reason == "expiry":
+                    reason_item.setForeground(QColor("blue"))
 
         layout.addWidget(history_table)
 
@@ -1222,18 +1288,11 @@ class PasswordManagerApp(QMainWindow):
 
         # Get the entry_id from the first column of the selected row
         row = selected[0].row()
-        entry_id = int(self.table.item(row, 0).text())
-        website = self.table.item(row, 1).text()
+        entry_id = int(self._require_table_item(self.table, row, 0).text())
+        website = self._require_table_item(self.table, row, 1).text()
 
         # Get current password data to determine current favorite status
-        passwords = get_passwords()
-        target_entry = None
-
-        for entry in passwords:
-            if entry[0] == entry_id:
-                target_entry = entry
-                break
-
+        target_entry = get_password_by_id(entry_id)
         if not target_entry:
             QMessageBox.warning(self, "Error", f"No password found with ID {entry_id}")
             return
@@ -1252,9 +1311,9 @@ class PasswordManagerApp(QMainWindow):
 
         # Show status message
         if new_favorite_status:
-            self.statusBar().showMessage(f"Added {website} to favorites", 3000)
+            self._show_status_message(f"Added {website} to favorites", 3000)
         else:
-            self.statusBar().showMessage(f"Removed {website} from favorites", 3000)
+            self._show_status_message(f"Removed {website} from favorites", 3000)
 
         if auto_close:
             auto_close.close()
@@ -1384,17 +1443,10 @@ class PasswordManagerApp(QMainWindow):
 
         # Get the entry_id from the first column of the selected row
         row = selected[0].row()
-        entry_id = int(self.table.item(row, 0).text())
+        entry_id = int(self._require_table_item(self.table, row, 0).text())
 
         # Get current password data
-        passwords = get_passwords()
-        target_entry = None
-
-        for entry in passwords:
-            if entry[0] == entry_id:
-                target_entry = entry
-                break
-
+        target_entry = get_password_by_id(entry_id)
         if not target_entry:
             QMessageBox.error(self, "Error", f"No password found with ID {entry_id}")
             return
@@ -1632,8 +1684,8 @@ class PasswordManagerApp(QMainWindow):
 
         # Get ID from the first column of the selected row
         row = selected[0].row()
-        entry_id = int(self.table.item(row, 0).text())
-        website = self.table.item(row, 1).text()
+        entry_id = int(self._require_table_item(self.table, row, 0).text())
+        website = self._require_table_item(self.table, row, 1).text()
 
         confirm = QMessageBox.question(
             self,
@@ -1644,7 +1696,7 @@ class PasswordManagerApp(QMainWindow):
         if confirm == QMessageBox.Yes:
             delete_password(entry_id)
             self.refresh_passwords()
-            self.statusBar().showMessage("Password deleted successfully")
+            self._show_status_message("Password deleted successfully")
 
         if auto_close:
             auto_close.close()
@@ -1692,7 +1744,7 @@ class PasswordManagerApp(QMainWindow):
 
         # Show waiting cursor and process events
         QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
-        self.statusBar().showMessage("Importing passwords...")
+        self._show_status_message("Importing passwords...")
 
         # Process events to show cursor change
         QApplication.processEvents()
@@ -1708,15 +1760,15 @@ class PasswordManagerApp(QMainWindow):
                 QMessageBox.information(
                     self, "Success", f"Imported {count} passwords successfully"
                 )
-                self.statusBar().showMessage(f"Imported {count} passwords")
+                self._show_status_message(f"Imported {count} passwords")
             else:
                 QMessageBox.warning(self, "Error", "Failed to import passwords")
-                self.statusBar().showMessage("Import failed")
+                self._show_status_message("Import failed")
 
         except Exception as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
-            self.statusBar().showMessage("Import failed")
+            self._show_status_message("Import failed")
 
     def create_full_backup(self):
         """Create a full backup of all data"""
@@ -1737,7 +1789,7 @@ class PasswordManagerApp(QMainWindow):
 
         # Show waiting cursor
         QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
-        self.statusBar().showMessage("Creating backup...")
+        self._show_status_message("Creating backup...")
 
         try:
             # Import from backup.py
@@ -1752,14 +1804,14 @@ class PasswordManagerApp(QMainWindow):
                 QMessageBox.information(
                     self, "Success", f"Full backup created at:\n{backup_path}"
                 )
-                self.statusBar().showMessage("Backup created successfully")
+                self._show_status_message("Backup created successfully")
             else:
                 QMessageBox.warning(self, "Error", "Failed to create backup")
-                self.statusBar().showMessage("Backup failed")
+                self._show_status_message("Backup failed")
         except Exception as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
-            self.statusBar().showMessage("Backup failed")
+            self._show_status_message("Backup failed")
 
     def restore_from_backup(self):
         """Restore data from a full backup"""
@@ -1792,7 +1844,7 @@ class PasswordManagerApp(QMainWindow):
 
         # Show waiting cursor
         QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
-        self.statusBar().showMessage("Restoring from backup...")
+        self._show_status_message("Restoring from backup...")
 
         try:
             # Import from backup.py
@@ -1812,16 +1864,16 @@ class PasswordManagerApp(QMainWindow):
                 QApplication.quit()
             else:
                 QMessageBox.warning(self, "Error", "Failed to restore from backup")
-                self.statusBar().showMessage("Restore failed")
+                self._show_status_message("Restore failed")
         except Exception as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
-            self.statusBar().showMessage("Restore failed")
+            self._show_status_message("Restore failed")
 
     def run_security_audit(self):
         """Run a security audit and display the results"""
         # Show waiting message and cursor
-        self.statusBar().showMessage("Running security audit...")
+        self._show_status_message("Running security audit...")
         QApplication.setOverrideCursor(QtCoreQt.CursorShape.WaitCursor)
 
         try:
@@ -1939,14 +1991,14 @@ class PasswordManagerApp(QMainWindow):
                     "No security issues found! Your passwords are in good shape.",
                 )
 
-            self.statusBar().showMessage("Security audit complete")
+            self._show_status_message("Security audit complete")
 
         except Exception as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(
                 self, "Error", f"An error occurred during the security audit: {str(e)}"
             )
-            self.statusBar().showMessage("Security audit failed")
+            self._show_status_message("Security audit failed")
 
     def setup_categories_tab(self):
         """Set up the categories management tab"""
@@ -2016,25 +2068,32 @@ class PasswordManagerApp(QMainWindow):
 
     def refresh_categories(self):
         """Refresh the categories list"""
+        sorting_enabled = False
         try:
-            categories = get_categories()
+            sorting_enabled = self.categories_list.isSortingEnabled()
+            self.categories_list.setSortingEnabled(False)
+            self.categories_list.setUpdatesEnabled(False)
+            self.categories_list.blockSignals(True)
 
-            # Count passwords per category using SQL GROUP BY for efficiency
+            # Load categories and counts in one query
             import sqlite3
             from secure_password_manager.utils.paths import get_database_path
+
             conn = sqlite3.connect(str(get_database_path()))
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT category, COUNT(*) as count
-                FROM passwords
-                GROUP BY category
+                SELECT c.name, c.color, COUNT(p.id) AS count
+                FROM categories c
+                LEFT JOIN passwords p ON p.category = c.name
+                GROUP BY c.name, c.color
+                ORDER BY c.name ASC
             """)
-            category_counts = dict(cursor.fetchall())
+            categories = cursor.fetchall()
             conn.close()
 
             self.categories_list.setRowCount(len(categories))
 
-            for row, (name, color) in enumerate(categories):
+            for row, (name, color, count) in enumerate(categories):
                 name_item = QTableWidgetItem(name)
                 self.categories_list.setItem(row, 0, name_item)
 
@@ -2042,14 +2101,18 @@ class PasswordManagerApp(QMainWindow):
                 color_item.setForeground(QColor(color))
                 self.categories_list.setItem(row, 1, color_item)
 
-                count = category_counts.get(name, 0)
                 count_item = QTableWidgetItem(str(count))
                 count_item.setTextAlignment(QtCoreQt.AlignmentFlag.AlignCenter)
                 self.categories_list.setItem(row, 2, count_item)
 
-            self.statusBar().showMessage(f"{len(categories)} categories loaded")
+            self._show_status_message(f"{len(categories)} categories loaded")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not load categories: {str(e)}")
+        finally:
+            if hasattr(self, "categories_list"):
+                self.categories_list.blockSignals(False)
+                self.categories_list.setUpdatesEnabled(True)
+                self.categories_list.setSortingEnabled(sorting_enabled)
 
     def add_new_category(self):
         """Add a new category"""
@@ -2079,7 +2142,7 @@ class PasswordManagerApp(QMainWindow):
             # Clear input
             self.new_category_name.clear()
 
-            self.statusBar().showMessage(f"Category '{name}' added")
+            self._show_status_message(f"Category '{name}' added")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to add category: {str(e)}")
 
@@ -2499,7 +2562,7 @@ class PasswordManagerApp(QMainWindow):
 
         self.update_key_mode_status()
         self.update_system_info()
-        self.statusBar().showMessage("Key management mode updated")
+        self._show_status_message("Key management mode updated")
 
     def run_kdf_wizard(self) -> None:
         settings = config.load_settings()
@@ -2600,7 +2663,7 @@ class PasswordManagerApp(QMainWindow):
         self.update_kdf_info()
         self.update_key_mode_status()
         self.update_system_info()
-        self.statusBar().showMessage("KDF parameters updated")
+        self._show_status_message("KDF parameters updated")
 
     def toggle_browser_bridge(self, state: int):
         enabled = state == 2  # Qt.Checked
@@ -2716,7 +2779,7 @@ class PasswordManagerApp(QMainWindow):
             logs = get_log_entries(count=100)
             if logs:
                 self.logs_text.setPlainText("\n".join(logs))
-                self.statusBar().showMessage(f"Loaded {len(logs)} log entries")
+                self._show_status_message(f"Loaded {len(logs)} log entries")
             else:
                 self.logs_text.setPlainText("No log entries found.")
         except Exception as e:
@@ -2836,7 +2899,7 @@ class PasswordManagerApp(QMainWindow):
                         self, "Success", "Master password changed successfully!"
                     )
 
-                self.statusBar().showMessage("Master password updated")
+                self._show_status_message("Master password updated")
             except Exception as e:
                 QMessageBox.critical(
                     self, "Error", f"Failed to change password: {str(e)}"
@@ -2893,7 +2956,7 @@ class PasswordManagerApp(QMainWindow):
                 self.update_2fa_buttons()
                 self.update_system_info()
 
-                self.statusBar().showMessage("2FA enabled successfully")
+                self._show_status_message("2FA enabled successfully")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to setup 2FA: {str(e)}")
 
@@ -2924,7 +2987,7 @@ class PasswordManagerApp(QMainWindow):
                 self.update_2fa_buttons()
                 self.update_system_info()
 
-                self.statusBar().showMessage("2FA disabled")
+                self._show_status_message("2FA disabled")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to disable 2FA: {str(e)}")
 
@@ -2954,7 +3017,7 @@ class PasswordManagerApp(QMainWindow):
                     )
                     self.update_key_protection_status()
                     self.update_system_info()
-                    self.statusBar().showMessage("Key protection disabled")
+                    self._show_status_message("Key protection disabled")
             else:
                 # Enable protection
                 reply = QMessageBox.question(
@@ -2978,7 +3041,7 @@ class PasswordManagerApp(QMainWindow):
                     )
                     self.update_key_protection_status()
                     self.update_system_info()
-                    self.statusBar().showMessage("Key protection enabled")
+                    self._show_status_message("Key protection enabled")
         except Exception as e:
             QMessageBox.critical(
                 self, "Error", f"Failed to toggle key protection: {str(e)}"
@@ -3023,9 +3086,9 @@ class PasswordManagerApp(QMainWindow):
                     "will be PERMANENTLY DELETED.\n\n"
                     "Make sure to export/backup your data before uninstalling!",
                 )
-                self.statusBar().showMessage("⚠️ Data will be removed on uninstall")
+                self._show_status_message("⚠️ Data will be removed on uninstall")
             else:
-                self.statusBar().showMessage("✓ Data will persist through uninstalls (safe)")
+                self._show_status_message("✓ Data will persist through uninstalls (safe)")
 
         except Exception as e:
             QMessageBox.critical(

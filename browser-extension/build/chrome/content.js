@@ -8,7 +8,7 @@
   const CONFIG = {
     formDetectionDelay: 500,
     autofillIconSize: 24,
-    iconColor: '#4CAF50'
+    iconColor: '#111111'
   };
 
   // State
@@ -84,9 +84,9 @@
       justify-content: center;
       width: ${CONFIG.autofillIconSize}px;
       height: ${CONFIG.autofillIconSize}px;
-      border-radius: 50%;
+      border-radius: 4px;
       background: white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      border: 1px solid #111111;
       transition: all 0.2s;
     `;
 
@@ -287,22 +287,23 @@
       top: 20px;
       right: 20px;
       padding: 12px 20px;
-      border-radius: 4px;
-      color: white;
+      border-radius: 2px;
+      color: #111111;
+      background: #ffffff;
+      border: 1px solid #111111;
       font-size: 14px;
       z-index: 999999;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       animation: spm-slide-in 0.3s ease-out;
     `;
 
-    const colors = {
-      success: '#4CAF50',
-      error: '#f44336',
-      info: '#2196F3'
+    const prefixes = {
+      success: 'Success: ',
+      error: 'Error: ',
+      info: 'Info: '
     };
 
-    notification.style.background = colors[type] || colors.info;
-    notification.textContent = message;
+    notification.textContent = `${prefixes[type] || prefixes.info}${message}`;
 
     document.body.appendChild(notification);
 
@@ -403,22 +404,23 @@
       right: 20px;
       background: white;
       padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      border-radius: 2px;
+      border: 1px solid #111111;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       z-index: 999999;
       max-width: 320px;
     `;
 
     modal.innerHTML = `
       <div style="margin-bottom: 15px; font-weight: bold;">Save Password?</div>
-      <div style="margin-bottom: 15px; font-size: 14px; color: #666;">
+      <div style="margin-bottom: 15px; font-size: 14px; color: #555;">
         Do you want to save credentials for ${escapeHtml(username)}?
       </div>
       <div style="display: flex; gap: 10px;">
-        <button id="spm-save-yes" style="flex: 1; padding: 8px; border: none; border-radius: 4px; background: #4CAF50; color: white; cursor: pointer;">
+        <button id="spm-save-yes" style="flex: 1; padding: 8px; border: 1px solid #111111; border-radius: 2px; background: #111111; color: white; cursor: pointer;">
           Save
         </button>
-        <button id="spm-save-no" style="flex: 1; padding: 8px; border: none; border-radius: 4px; background: #ddd; cursor: pointer;">
+        <button id="spm-save-no" style="flex: 1; padding: 8px; border: 1px solid #111111; border-radius: 2px; background: #ffffff; color: #111111; cursor: pointer;">
           Not Now
         </button>
       </div>

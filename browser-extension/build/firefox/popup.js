@@ -91,7 +91,7 @@ async function setConnectedStatus() {
       expiresValue.textContent = `in ${hoursLeft} hour${hoursLeft > 1 ? 's' : ''}`;
     } else {
       expiresValue.textContent = 'Soon (re-pair recommended)';
-      expiresValue.style.color = '#f44336';
+      expiresValue.style.color = '#111111';
     }
   }
 }
@@ -234,52 +234,23 @@ async function handleTestAutofill() {
 
 // Show error message
 function showError(message) {
-  const errorDiv = document.createElement('div');
-  errorDiv.style.cssText = `
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    padding: 10px;
-    background: #f44336;
-    color: white;
-    border-radius: 4px;
-    font-size: 12px;
-    z-index: 1000;
-    animation: slideDown 0.3s ease-out;
-  `;
-  errorDiv.textContent = message;
-  document.body.appendChild(errorDiv);
-
-  setTimeout(() => {
-    errorDiv.style.animation = 'slideUp 0.3s ease-out';
-    setTimeout(() => errorDiv.remove(), 300);
-  }, 3000);
+  showMessage(message);
 }
 
 // Show success message
 function showSuccess(message) {
-  const successDiv = document.createElement('div');
-  successDiv.style.cssText = `
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    padding: 10px;
-    background: #4CAF50;
-    color: white;
-    border-radius: 4px;
-    font-size: 12px;
-    z-index: 1000;
-    animation: slideDown 0.3s ease-out;
-  `;
-  successDiv.textContent = message;
-  document.body.appendChild(successDiv);
+  showMessage(message);
+}
+
+function showMessage(message) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message';
+  messageDiv.textContent = message;
+  document.body.appendChild(messageDiv);
 
   setTimeout(() => {
-    successDiv.style.animation = 'slideUp 0.3s ease-out';
-    setTimeout(() => successDiv.remove(), 300);
-  }, 2000);
+    messageDiv.remove();
+  }, 2200);
 }
 
 // Show about dialog
@@ -287,38 +258,11 @@ function showAboutDialog() {
   alert(`Secure Password Manager Extension
 Version: 0.1.0
 
-A browser extension for secure password autofill and management.
+Browser extension for secure password autofill and management.
 
 © 2024 ArcheWizard
 Licensed under MIT`);
 }
-
-// Add animations
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes slideDown {
-    from {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-
-  @keyframes slideUp {
-    from {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    to {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-  }
-`;
-document.head.appendChild(style);
 
 // Initialize on load
 init();

@@ -6,6 +6,8 @@ import json
 import secrets
 import threading
 import time
+from urllib.error import URLError
+from urllib.request import urlopen
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -127,6 +129,7 @@ class BrowserBridgeService:
         self._cert_path: Optional[Path] = None
         self._key_path: Optional[Path] = None
         self._cert_fingerprint: Optional[str] = None
+        self._external_http_bridge = False
 
         # Generate TLS certificates if enabled
         if self.enable_tls:
@@ -454,7 +457,16 @@ class BrowserBridgeService:
     def is_running(self) -> bool:
         http_running = bool(self._server and self._thread and self._thread.is_alive())
         socket_running = bool(self._socket_server and self._socket_thread and self._socket_thread.is_alive())
-        return http_running or socket_running
+        return http_running or socket_running or self._external_http_bridge
+
+        try:
+            with urlopen(f"http://{self.host}:{self.port}/v1/status", timeout=0.25) as response:
+                if response.status != 200:
+                    return False
+                payload = json.loads(response.read().decode("utf-8"))
+                return payload.get("status") == "ok"
+        except (OSError, URLError, json.JSONDecodeError, ValueError):
+            return False
 
     def _handle_socket_request(self, conn: Any) -> None:
         """Handle a single domain socket connection."""
@@ -588,6 +600,21 @@ class BrowserBridgeService:
         if self.is_running:
             return
 
+        # If another compatible bridge is already answering on the configured
+        # endpoint, treat it as running instead of trying to bind again.
+        try:
+            import requests
+
+            response = requests.get(f"http://{self.host}:{self.port}/v1/status", timeout=0.25)
+            if response.ok:
+                payload = response.json()
+                if payload.get("status") == "ok":
+                    self._external_http_bridge = True
+                    log_info(f"Browser bridge already available on http://{self.host}:{self.port}")
+                    return
+        except Exception:
+            self._external_http_bridge = False
+
         # Start HTTP/HTTPS server
         # Configure TLS if enabled
         if self.enable_tls and self._cert_path and self._key_path:
@@ -637,6 +664,7 @@ class BrowserBridgeService:
             self._thread.join(timeout=3)
             self._thread = None
         self._server = None
+        self._external_http_bridge = False
 
         # Stop domain socket server
         if self._socket_server:

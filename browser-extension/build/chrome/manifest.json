@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Secure Password Manager",
-  "version": "1.10.3",
+  "version": "1.10.4",
   "description": "Browser extension for Secure Password Manager - secure credential autofill and management",
   "permissions": [
     "storage",
@@ -9,7 +9,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://127.0.0.1:43110/*"
+    "http://127.0.0.1:43110/*",
+    "https://127.0.0.1:43110/*"
   ],
   "background": {
     "service_worker": "background.js"

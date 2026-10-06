@@ -151,6 +151,23 @@ def init_db() -> None:
                     (category, color),
                 )
 
+            # Targeted indexes for the most common UI filters and sorts
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_passwords_category ON passwords(category)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_passwords_favorite_website ON passwords(favorite DESC, website ASC)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_passwords_expiry_date ON passwords(expiry_date)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_passwords_website ON passwords(website)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_passwords_username ON passwords(username)"
+            )
+
         # Run any pending migrations (uses its own connection)
         ensure_latest_schema()
     except Exception as e:
@@ -233,6 +250,14 @@ def get_passwords(
 
         cursor.execute(query, params)
         return cursor.fetchall()
+
+
+def get_password_by_id(entry_id: int) -> Optional[Tuple]:
+    """Retrieve a single password entry by ID."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM passwords WHERE id = ?", (entry_id,))
+        return cursor.fetchone()
 
 
 def delete_password(entry_id: int) -> None:

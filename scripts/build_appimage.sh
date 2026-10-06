@@ -26,20 +26,23 @@ VERSION=$(cat VERSION.txt | tr -d '\n')
 echo -e "${GREEN}Building AppImage for version: $VERSION${NC}"
 echo ""
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}Creating virtual environment...${NC}"
-    python3 -m venv venv
+# Reuse an already-active venv when available; otherwise prefer the local venv.
+if [ -n "$VIRTUAL_ENV" ]; then
+    PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+    echo "Using active virtual environment: $VIRTUAL_ENV"
+elif [ -x "venv/bin/python" ]; then
+    PYTHON_BIN="venv/bin/python"
+    echo "Using project virtual environment: $PYTHON_BIN"
+else
+    echo -e "${RED}No virtual environment found. Activate the existing venv or create venv/ first.${NC}"
+    exit 1
 fi
-
-# Activate virtual environment
-source venv/bin/activate
 
 # Install dependencies
 echo "Installing build dependencies..."
-pip install --upgrade pip pyinstaller
+"$PYTHON_BIN" -m pip install --upgrade pip pyinstaller
 # Install the project itself with all dependencies
-pip install -e .
+"$PYTHON_BIN" -m pip install -e .
 
 # Download appimagetool if not present
 APPIMAGE_TOOL="appimagetool-x86_64.AppImage"

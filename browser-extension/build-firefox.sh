@@ -27,11 +27,47 @@ cp "$SCRIPT_DIR/popup.js" "$BUILD_DIR/"
 
 # Create icons directory with placeholder if needed
 mkdir -p "$BUILD_DIR/icons"
-if [ -f "$SCRIPT_DIR/icons/icon16.png" ]; then
+if [ -f "$SCRIPT_DIR/icons/icon-16.png" ]; then
     cp "$SCRIPT_DIR/icons/"*.png "$BUILD_DIR/icons/"
+elif [ -d "$SCRIPT_DIR/build/chrome/icons" ] && [ -f "$SCRIPT_DIR/build/chrome/icons/icon-16.png" ]; then
+    cp "$SCRIPT_DIR/build/chrome/icons/"*.png "$BUILD_DIR/icons/"
 else
-    echo "Warning: No icons found. Extension will use default icons."
-    echo "Add 16x16, 48x48, and 128x128 PNG icons to browser-extension/icons/"
+    echo "Creating monochrome placeholder icons..."
+
+    if command -v convert &> /dev/null; then
+        for size in 16 32 48 128; do
+            radius=$((size / 8))
+            lock_body_height=$((size / 2))
+            lock_body_width=$((size * 5 / 8))
+            lock_body_x=$(((size - lock_body_width) / 2))
+            lock_body_y=$((size / 3))
+            shackle_radius=$((size / 6))
+            shackle_center_x=$((size / 2))
+            shackle_center_y=$((size / 4))
+
+            convert -size ${size}x${size} xc:none \
+                -fill "#111111" \
+                -draw "roundrectangle 0,0 $size,$size $radius,$radius" \
+                -fill white \
+                -draw "roundrectangle $lock_body_x,$lock_body_y $((lock_body_x + lock_body_width)),$((lock_body_y + lock_body_height)) 2,2" \
+                -fill none \
+                -stroke white \
+                -strokewidth 2 \
+                -draw "arc $((shackle_center_x - shackle_radius)),$((shackle_center_y - shackle_radius/2)) $((shackle_center_x + shackle_radius)),$((shackle_center_y + shackle_radius)) 180,0" \
+                "$BUILD_DIR/icons/icon-${size}.png" 2>/dev/null || \
+            convert -size ${size}x${size} xc:none \
+                -fill "#111111" \
+                -draw "roundrectangle 0,0 $size,$size $radius,$radius" \
+                -fill white \
+                -font DejaVu-Sans-Bold \
+                -pointsize $((size / 3)) \
+                -gravity center \
+                -annotate 0 "LK" \
+                "$BUILD_DIR/icons/icon-${size}.png"
+        done
+    else
+        python3 -c "import struct,zlib;\nfrom pathlib import Path\n\ndef png(width,height,color):\n    out=b'\\x89PNG\\r\\n\\x1a\\n'\n    ihdr=struct.pack('>IIBBBBB', width,height,8,2,0,0,0)\n    out+=struct.pack('>I',13)+b'IHDR'+ihdr+struct.pack('>I', zlib.crc32(b'IHDR'+ihdr)&0xffffffff)\n    raw=b''\n    for _ in range(height):\n        raw+=b'\\x00'+bytes(color)*width\n    data=zlib.compress(raw,9)\n    out+=struct.pack('>I', len(data))+b'IDAT'+data+struct.pack('>I', zlib.crc32(b'IDAT'+data)&0xffffffff)\n    out+=struct.pack('>I',0)+b'IEND'+struct.pack('>I', zlib.crc32(b'IEND')&0xffffffff)\n    return out\n\nbase=Path('$BUILD_DIR/icons')\nbase.mkdir(parents=True, exist_ok=True)\nfor size in (16,32,48,128):\n    (base / f'icon-{size}.png').write_bytes(png(size,size,(17,17,17)))"
+    fi
 fi
 
 # Create README for the build

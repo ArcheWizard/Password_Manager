@@ -10,12 +10,12 @@ const chrome = typeof browser !== 'undefined' ? browser : chrome;
 
 // For now, we'll duplicate the necessary functions with Firefox compatibility
 
-// Try HTTPS first, fallback to HTTP
+// Try HTTP first for the local desktop app, fallback to HTTPS when configured.
 const API_BASE_URLS = [
-  'https://127.0.0.1:43110',
-  'http://127.0.0.1:43110'
+  'http://127.0.0.1:43110',
+  'https://127.0.0.1:43110'
 ];
-let API_BASE_URL = API_BASE_URLS[0]; // Start with HTTPS
+let API_BASE_URL = API_BASE_URLS[0];
 
 const STORAGE_KEYS = {
   TOKEN: 'auth_token',
@@ -73,7 +73,7 @@ async function getApiBaseUrl() {
     }
   }
 
-  // Default to HTTPS if nothing works
+  // Default to HTTP for the local bridge if nothing works yet.
   return API_BASE_URLS[0];
 }
 
